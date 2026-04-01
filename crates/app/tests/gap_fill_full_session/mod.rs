@@ -50,7 +50,6 @@ async fn gap_fill_full_session_lifecycle() {
             "userId": user,
             "gameKind": "gap_fill",
             "contentRequest": { "source": "hard_words", "limit": 10, "language": "no" },
-            "traceId": "scenario-create"
         })),
     )
     .await;
@@ -63,7 +62,7 @@ async fn gap_fill_full_session_lifecycle() {
         app.clone(),
         "POST",
         &format!("/api/v1/game-sessions/{session_id}/start"),
-        Some(json!({ "userId": user, "traceId": "scenario-start" })),
+        Some(json!({ "userId": user })),
     )
     .await;
     assert_status(st, StatusCode::OK, &body);
@@ -73,7 +72,7 @@ async fn gap_fill_full_session_lifecycle() {
         let (st, view) = json_roundtrip(
             app.clone(),
             "GET",
-            &format!("/api/v1/game-sessions/{session_id}?userId={user}&traceId=scenario-get-{i}"),
+            &format!("/api/v1/game-sessions/{session_id}?userId={user}"),
             None,
         )
         .await;
@@ -88,7 +87,6 @@ async fn gap_fill_full_session_lifecycle() {
             Some(json!({
                 "userId": user,
                 "answer": { "type": "text", "value": word },
-                "traceId": format!("scenario-answer-{i}")
             })),
         )
         .await;
@@ -105,7 +103,7 @@ async fn gap_fill_full_session_lifecycle() {
                 app.clone(),
                 "POST",
                 &format!("/api/v1/game-sessions/{session_id}/advance"),
-                Some(json!({ "userId": user, "traceId": format!("scenario-advance-{i}") })),
+                Some(json!({ "userId": user })),
             )
             .await;
             assert_status(st, StatusCode::OK, &adv);
@@ -117,7 +115,7 @@ async fn gap_fill_full_session_lifecycle() {
     let (st, res_body) = json_roundtrip(
         app.clone(),
         "GET",
-        &format!("/api/v1/game-sessions/{session_id}/result?userId={user}&traceId=scenario-result"),
+        &format!("/api/v1/game-sessions/{session_id}/result?userId={user}"),
         None,
     )
     .await;

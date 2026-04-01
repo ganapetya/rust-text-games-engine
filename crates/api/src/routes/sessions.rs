@@ -32,12 +32,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/game-sessions/{session_id}/result", get(result))
 }
 
-fn effective_trace(trace: &RequestTrace, body: Option<&str>) -> String {
-    body.filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| trace.trace_id.clone())
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSessionReq {
@@ -48,8 +42,6 @@ pub struct CreateSessionReq {
     pub content_request: ContentReqDto,
     #[serde(default)]
     pub options: SessionOptionsDto,
-    #[serde(default)]
-    pub trace_id: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -93,7 +85,7 @@ async fn create_session(
     Extension(trace): Extension<RequestTrace>,
     Json(body): Json<CreateSessionReq>,
 ) -> Result<Json<CreateSessionResp>, ApiError> {
-    let trace_id = effective_trace(&trace, body.trace_id.as_deref());
+    let trace_id = trace.trace_id.clone();
     let cmd = CreateGameSessionCommand {
         user_id: UserId(body.user_id),
         game_kind: body.game_kind,
@@ -124,8 +116,6 @@ async fn create_session(
 #[serde(rename_all = "camelCase")]
 pub struct UserActionBody {
     pub user_id: Uuid,
-    #[serde(default)]
-    pub trace_id: Option<String>,
 }
 
 async fn start_session(
@@ -134,7 +124,7 @@ async fn start_session(
     Path(session_id): Path<Uuid>,
     Json(body): Json<UserActionBody>,
 ) -> Result<Json<SessionPublicView>, ApiError> {
-    let trace_id = effective_trace(&trace, body.trace_id.as_deref());
+    let trace_id = trace.trace_id.clone();
     let sid = GameSessionId(session_id);
     tracing::info!(user_id = %body.user_id, "start_game_session");
     let session = start_game_session(&state.deps, sid, UserId(body.user_id))
@@ -147,8 +137,6 @@ async fn start_session(
 #[serde(rename_all = "camelCase")]
 pub struct GetSessionQuery {
     pub user_id: Uuid,
-    #[serde(default)]
-    pub trace_id: Option<String>,
 }
 
 async fn get_session(
@@ -157,7 +145,7 @@ async fn get_session(
     Path(session_id): Path<Uuid>,
     Query(q): Query<GetSessionQuery>,
 ) -> Result<Json<SessionPublicView>, ApiError> {
-    let trace_id = effective_trace(&trace, q.trace_id.as_deref());
+    let trace_id = trace.trace_id.clone();
     tracing::info!(user_id = %q.user_id, "get_game_session");
     let session = get_game_session(&state.deps, GameSessionId(session_id), UserId(q.user_id))
         .await
@@ -170,8 +158,6 @@ async fn get_session(
 pub struct AnswerReq {
     pub user_id: Uuid,
     pub answer: UserAnswer,
-    #[serde(default)]
-    pub trace_id: Option<String>,
 }
 
 async fn submit_step_answer(
@@ -180,7 +166,7 @@ async fn submit_step_answer(
     Path((session_id, step_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<AnswerReq>,
 ) -> Result<Json<AnswerResp>, ApiError> {
-    let trace_id = effective_trace(&trace, body.trace_id.as_deref());
+    let trace_id = trace.trace_id.clone();
     tracing::info!(user_id = %body.user_id, "submit_answer");
     let cmd = SubmitAnswerCommand {
         session_id: GameSessionId(session_id),
@@ -222,7 +208,7 @@ async fn advance(
     Path(session_id): Path<Uuid>,
     Json(body): Json<UserActionBody>,
 ) -> Result<Json<SessionPublicView>, ApiError> {
-    let trace_id = effective_trace(&trace, body.trace_id.as_deref());
+    let trace_id = trace.trace_id.clone();
     let session = advance_session(&state.deps, GameSessionId(session_id), UserId(body.user_id))
         .await
         .map_err(|e| ApiError::from_app_err(e, Some(trace_id)))?;
@@ -233,8 +219,6 @@ async fn advance(
 #[serde(rename_all = "camelCase")]
 pub struct ResultQuery {
     pub user_id: Uuid,
-    #[serde(default)]
-    pub trace_id: Option<String>,
 }
 
 async fn result(
@@ -243,7 +227,7 @@ async fn result(
     Path(session_id): Path<Uuid>,
     Query(q): Query<ResultQuery>,
 ) -> Result<Json<shakti_game_domain::GameResult>, ApiError> {
-    let trace_id = effective_trace(&trace, q.trace_id.as_deref());
+    let trace_id = trace.trace_id.clone();
     let res = get_game_result(&state.deps, GameSessionId(session_id), UserId(q.user_id))
         .await
         .map_err(|e| ApiError::from_app_err(e, Some(trace_id)))?;
