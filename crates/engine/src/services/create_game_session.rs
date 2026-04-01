@@ -1,4 +1,4 @@
-use crate::deps::ApplicationDeps;
+use crate::deps::EngineDeps;
 use crate::errors::AppError;
 use crate::ports::ContentRequest;
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,7 @@ pub struct CreateGameSessionCommand {
 }
 
 pub async fn create_game_session(
-    deps: &ApplicationDeps,
+    deps: &EngineDeps,
     cmd: CreateGameSessionCommand,
 ) -> Result<GameSession, AppError> {
     if cmd.game_kind != GameKind::GapFill {

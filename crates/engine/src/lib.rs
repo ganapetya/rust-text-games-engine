@@ -3,7 +3,7 @@ pub mod errors;
 pub mod ports;
 pub mod services;
 
-pub use deps::ApplicationDeps;
+pub use deps::EngineDeps;
 pub use errors::AppError;
 pub use ports::{
     Clock, ContentProvider, ContentRequest, GameDefinitionRepository, GameSessionRepository,

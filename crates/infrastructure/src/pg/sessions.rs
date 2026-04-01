@@ -2,8 +2,8 @@ use crate::pg::mapping::{
     session_state_from_db, session_state_to_db, step_from_json, step_state_to_db,
 };
 use async_trait::async_trait;
-use shakti_game_application::{AppError, GameSessionRepository};
 use shakti_game_domain::{GameSession, GameSessionId, Score};
+use shakti_game_engine_core::{AppError, GameSessionRepository};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 

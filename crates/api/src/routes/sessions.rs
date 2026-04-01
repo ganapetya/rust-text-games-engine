@@ -4,13 +4,13 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use shakti_game_application::{
-    advance_session, create_game_session, get_game_result, get_game_session, start_game_session,
-    submit_answer, ContentRequest, CreateGameSessionCommand, SessionOptions, SubmitAnswerCommand,
-};
 use shakti_game_domain::{
     GameKind, GameSession, GameSessionId, GameSessionState, GameStep, StepPrompt, StepState,
     UserAnswer, UserId,
+};
+use shakti_game_engine_core::{
+    advance_session, create_game_session, get_game_result, get_game_session, start_game_session,
+    submit_answer, ContentRequest, CreateGameSessionCommand, SessionOptions, SubmitAnswerCommand,
 };
 use std::sync::Arc;
 use uuid::Uuid;

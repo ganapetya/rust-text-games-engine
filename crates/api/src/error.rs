@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use serde::Serialize;
-use shakti_game_application::AppError;
+use shakti_game_engine_core::AppError;
 
 #[derive(Serialize)]
 pub struct ErrorBody {

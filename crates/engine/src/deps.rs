@@ -4,7 +4,7 @@ use crate::ports::{
 use shakti_game_domain::GameEngineRegistry;
 use std::sync::Arc;
 
-pub struct ApplicationDeps {
+pub struct EngineDeps {
     pub sessions: Arc<dyn GameSessionRepository>,
     pub definitions: Arc<dyn GameDefinitionRepository>,
     pub content: Arc<dyn ContentProvider>,

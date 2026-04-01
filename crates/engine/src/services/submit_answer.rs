@@ -1,4 +1,4 @@
-use crate::deps::ApplicationDeps;
+use crate::deps::EngineDeps;
 use crate::errors::AppError;
 use shakti_game_domain::{GameSessionId, GameStepId, UserAnswer};
 
@@ -10,7 +10,7 @@ pub struct SubmitAnswerCommand {
 }
 
 pub async fn submit_answer(
-    deps: &ApplicationDeps,
+    deps: &EngineDeps,
     cmd: SubmitAnswerCommand,
 ) -> Result<shakti_game_domain::GameSession, AppError> {
     let mut session = deps.sessions.get(cmd.session_id).await?;

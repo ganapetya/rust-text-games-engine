@@ -169,7 +169,7 @@ impl GameEngine for GapFillEngine {
         let ok = Self::normalize(value) == Self::normalize(expected);
         Ok(StepEvaluation {
             is_correct: ok,
-            awarded_points: 0, // filled by application from policy
+            awarded_points: 0, // filled by engine layer from policy
             expected: Some(expected.clone()),
             actual: Some(value.clone()),
             explanation: None,

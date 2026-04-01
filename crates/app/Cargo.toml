@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 shakti-game-domain = { path = "../domain" }
-shakti-game-application = { path = "../application" }
+shakti-game-engine-core = { path = "../engine" }
 shakti-game-infrastructure = { path = "../infrastructure" }
 shakti-game-api = { path = "../api" }
 tokio = { version = "1", features = ["full"] }

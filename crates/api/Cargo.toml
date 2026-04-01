@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 shakti-game-domain = { path = "../domain" }
-shakti-game-application = { path = "../application" }
+shakti-game-engine-core = { path = "../engine" }
 shakti-game-infrastructure = { path = "../infrastructure" }
 axum = { version = "0.8", features = ["macros", "json"] }
 tower = "0.5"

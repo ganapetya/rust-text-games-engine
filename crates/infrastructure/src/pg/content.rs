@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use shakti_game_application::{AppError, ContentProvider, ContentRequest};
 use shakti_game_domain::{LearningItem, LearningItemId, UserId};
+use shakti_game_engine_core::{AppError, ContentProvider, ContentRequest};
 use sqlx::{PgPool, Row};
 
 pub struct DbContentProvider {

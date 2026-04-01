@@ -90,10 +90,10 @@ curl -s 'http://127.0.0.1:8010/api/v1/game-sessions/SESSION_ID/result?userId=111
 ## Project layout
 
 - `crates/domain` — pure model, gap-fill engine, unit tests
-- `crates/application` — use cases and repository ports
+- `crates/engine` — use cases and repository ports (package `shakti-game-engine-core`)
 - `crates/infrastructure` — SQLx PostgreSQL adapters
 - `crates/api` — Axum routes; `X-Trace-Id` on requests and mirrored on all responses; span field `trace_id` for structured logs
-- `crates/app` — binary, config, migrations on startup
+- `crates/app` — HTTP server binary (`shakti-game-engine`), config, migrations on startup; avoids name clash with `crates/engine`
 - `migrations/` — SQL schema + seed data
 
 Design reference: [shakti_game_engine_design.md](./shakti_game_engine_design.md).

@@ -175,7 +175,7 @@ This is a good Rust-learning opportunity because it maps nicely to enums and typ
 - `serde` / `serde_json` — serialization
 - `uuid` — identifiers
 - `time` or `chrono` — timestamps
-- `thiserror` — domain/application errors
+- `thiserror` — domain and engine-layer errors
 - `anyhow` — only at binary/integration boundaries if needed
 - `tracing` and `tracing-subscriber` — structured logs
 - `tower` / `tower-http` — middleware
@@ -221,7 +221,7 @@ shakti-game-engine/
           admin.rs
         dto/
         error.rs
-    application/
+    engine/
       src/
         lib.rs
         services/
@@ -545,7 +545,7 @@ It teaches:
 - trait objects
 - `Arc<dyn Trait>`
 - modular boundaries
-- clean application/domain separation
+- clean engine/domain separation
 
 ---
 
@@ -981,7 +981,7 @@ This gives you auditability and debugging without going full event sourcing.
 
 ## 16. Repository Design
 
-Use ports in application layer and implementations in infrastructure.
+Use ports in the engine layer and implementations in infrastructure.
 
 ```rust
 #[async_trait::async_trait]
@@ -1130,7 +1130,7 @@ POST /api/v1/admin/timeouts/check
 ## Game creation flow
 
 1. API receives create session request
-2. application service resolves `GameDefinition`
+2. engine service resolves `GameDefinition`
 3. fetches learning items via `ContentProvider`
 4. optionally transforms content via LLM/template
 5. engine generates `PreparedContent`
@@ -1610,12 +1610,12 @@ You can give Cursor the following:
 > - one game kind: gap_fill
 > - PostgreSQL persistence for game_definitions, game_sessions, game_steps, session_events
 > - passive step timeout validation
-> - clean layered structure: api / application / domain / infrastructure
+> - clean layered structure: api / engine / domain / infrastructure
 > - strong unit tests for domain transitions and answer evaluation
 >
 > Design rules:
 > - domain layer must stay mostly pure and synchronous
-> - repositories and providers are traits in application layer
+> - repositories and providers are traits in engine layer
 > - SQLx repositories in infrastructure
 > - use enums for states, errors, game kinds, answer types
 > - keep prompts/LLM integration in separate modules

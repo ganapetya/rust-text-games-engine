@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use shakti_game_application::{AppError, SessionEventRepository};
 use shakti_game_domain::GameSessionId;
+use shakti_game_engine_core::{AppError, SessionEventRepository};
 use sqlx::PgPool;
 use uuid::Uuid;
 

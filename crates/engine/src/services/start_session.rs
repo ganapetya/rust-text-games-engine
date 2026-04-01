@@ -1,9 +1,9 @@
-use crate::deps::ApplicationDeps;
+use crate::deps::EngineDeps;
 use crate::errors::AppError;
 use shakti_game_domain::{GameSessionId, GameSessionState};
 
 pub async fn start_game_session(
-    deps: &ApplicationDeps,
+    deps: &EngineDeps,
     session_id: GameSessionId,
     user_id: shakti_game_domain::UserId,
 ) -> Result<shakti_game_domain::GameSession, AppError> {

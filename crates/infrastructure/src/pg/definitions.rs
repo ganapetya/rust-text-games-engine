@@ -1,8 +1,8 @@
 use async_trait::async_trait;
-use shakti_game_application::{AppError, GameDefinitionRepository};
 use shakti_game_domain::{
     GameDefinition, GameDefinitionId, GameKind, GapFillConfig, ScoringPolicy, TimingPolicy,
 };
+use shakti_game_engine_core::{AppError, GameDefinitionRepository};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 

@@ -1,5 +1,5 @@
-use shakti_game_application::AppError;
 use shakti_game_domain::{GameSessionState, GameStep, StepState};
+use shakti_game_engine_core::AppError;
 use uuid::Uuid;
 
 pub fn session_state_to_db(s: GameSessionState) -> &'static str {

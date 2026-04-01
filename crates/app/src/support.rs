@@ -1,9 +1,9 @@
-//! Shared wiring: database pool, migrations, [`ApplicationDeps`], [`AppState`], and HTTP router.
+//! Shared wiring: database pool, migrations, [`EngineDeps`], [`AppState`], and HTTP router.
 //! Integration tests and the binary both use this so scenarios exercise the same stack as production.
 
 use shakti_game_api::{build_router, AppState};
-use shakti_game_application::ApplicationDeps;
 use shakti_game_domain::{GameEngineRegistry, GapFillEngine};
+use shakti_game_engine_core::EngineDeps;
 use shakti_game_infrastructure::{
     DbContentProvider, PgGameDefinitionRepository, PgGameSessionRepository,
     PgSessionEventRepository, SystemClock,
@@ -22,12 +22,12 @@ pub async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::migrate::Mi
     sqlx::migrate!("../../migrations").run(pool).await
 }
 
-pub fn build_application_deps(pool: sqlx::PgPool) -> Arc<ApplicationDeps> {
+pub fn build_engine_deps(pool: sqlx::PgPool) -> Arc<EngineDeps> {
     let mut engines = GameEngineRegistry::new();
     engines.register(Arc::new(GapFillEngine::new()));
     let engines = Arc::new(engines);
 
-    Arc::new(ApplicationDeps {
+    Arc::new(EngineDeps {
         sessions: Arc::new(PgGameSessionRepository::new(pool.clone())),
         definitions: Arc::new(PgGameDefinitionRepository::new(pool.clone())),
         content: Arc::new(DbContentProvider::new(pool.clone())),
@@ -38,7 +38,7 @@ pub fn build_application_deps(pool: sqlx::PgPool) -> Arc<ApplicationDeps> {
 }
 
 pub fn build_app_state(pool: sqlx::PgPool) -> AppState {
-    let deps = build_application_deps(pool.clone());
+    let deps = build_engine_deps(pool.clone());
     AppState { deps, pool }
 }
 
