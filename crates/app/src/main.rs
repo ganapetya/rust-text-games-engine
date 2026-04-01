@@ -6,7 +6,7 @@ mod config;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = config::Config::from_env().map_err(|e| e)?;
+    let config = config::Config::from_env()?;
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::registry()
