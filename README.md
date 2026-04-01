@@ -35,7 +35,9 @@ Migrations seed sample `learning_items` for user id:
 
 ## Example API flow
 
-Create session (camelCase JSON; optional `X-Trace-Id` header):
+Optional request header `X-Trace-Id` selects the correlation id; if omitted, the server generates one. **Every response** echoes the effective id in the **`X-Trace-Id` response header** (not in JSON bodies). For browser clients, expose that header via CORS (`Access-Control-Expose-Headers`) if the UI needs to read it.
+
+Create session (camelCase JSON):
 
 ```bash
 curl -s -X POST http://127.0.0.1:8010/api/v1/game-sessions \
@@ -90,7 +92,7 @@ curl -s 'http://127.0.0.1:8010/api/v1/game-sessions/SESSION_ID/result?userId=111
 - `crates/domain` — pure model, gap-fill engine, unit tests
 - `crates/application` — use cases and repository ports
 - `crates/infrastructure` — SQLx PostgreSQL adapters
-- `crates/api` — Axum routes and tracing middleware (`user_id` / `trace_id` fields on spans via `X-Trace-Id` and request logging)
+- `crates/api` — Axum routes; `X-Trace-Id` on requests and mirrored on all responses; span field `trace_id` for structured logs
 - `crates/app` — binary, config, migrations on startup
 - `migrations/` — SQL schema + seed data
 

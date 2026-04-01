@@ -1,6 +1,14 @@
-use axum::{body::Body, extract::Request, middleware::Next, response::Response};
+use axum::{
+    body::Body,
+    extract::Request,
+    http::{HeaderName, HeaderValue},
+    middleware::Next,
+    response::Response,
+};
 use tracing::Instrument;
 use uuid::Uuid;
+
+static X_TRACE_ID: HeaderName = HeaderName::from_static("x-trace-id");
 
 #[derive(Clone)]
 pub struct RequestTrace {
@@ -10,7 +18,7 @@ pub struct RequestTrace {
 pub async fn request_trace_middleware(mut req: Request<Body>, next: Next) -> Response {
     let trace_id = req
         .headers()
-        .get("x-trace-id")
+        .get(&X_TRACE_ID)
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string())
         .filter(|s| !s.is_empty())
@@ -25,5 +33,14 @@ pub async fn request_trace_middleware(mut req: Request<Body>, next: Next) -> Res
         trace_id = %trace_id,
     );
 
-    async move { next.run(req).await }.instrument(span).await
+    let mut response = async move { next.run(req).await }.instrument(span).await;
+
+    let header_val = HeaderValue::from_str(&trace_id).unwrap_or_else(|_| {
+        HeaderValue::from_str(&Uuid::new_v4().to_string()).expect("uuid header value")
+    });
+    response
+        .headers_mut()
+        .insert(X_TRACE_ID.clone(), header_val);
+
+    response
 }

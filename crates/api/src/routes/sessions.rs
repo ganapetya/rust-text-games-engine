@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, Query, State},
     routing::{get, post},
-    Extension, Json, Router,
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use shakti_game_application::{
@@ -16,7 +16,6 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::error::ApiError;
-use crate::middleware::RequestTrace;
 use crate::state::AppState;
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -77,15 +76,12 @@ pub struct CreateSessionResp {
     pub state: GameSessionState,
     pub current_step_index: usize,
     pub steps_count: usize,
-    pub trace_id: String,
 }
 
 async fn create_session(
     State(state): State<Arc<AppState>>,
-    Extension(trace): Extension<RequestTrace>,
     Json(body): Json<CreateSessionReq>,
 ) -> Result<Json<CreateSessionResp>, ApiError> {
-    let trace_id = trace.trace_id.clone();
     let cmd = CreateGameSessionCommand {
         user_id: UserId(body.user_id),
         game_kind: body.game_kind,
@@ -102,13 +98,12 @@ async fn create_session(
     };
     let session = create_game_session(&state.deps, cmd)
         .await
-        .map_err(|e| ApiError::from_app_err(e, Some(trace_id.clone())))?;
+        .map_err(ApiError::from_app_err)?;
     Ok(Json(CreateSessionResp {
         session_id: session.id.0,
         state: session.state,
         current_step_index: session.current_step_index,
         steps_count: session.steps.len(),
-        trace_id,
     }))
 }
 
@@ -120,16 +115,14 @@ pub struct UserActionBody {
 
 async fn start_session(
     State(state): State<Arc<AppState>>,
-    Extension(trace): Extension<RequestTrace>,
     Path(session_id): Path<Uuid>,
     Json(body): Json<UserActionBody>,
 ) -> Result<Json<SessionPublicView>, ApiError> {
-    let trace_id = trace.trace_id.clone();
     let sid = GameSessionId(session_id);
     tracing::info!(user_id = %body.user_id, "start_game_session");
     let session = start_game_session(&state.deps, sid, UserId(body.user_id))
         .await
-        .map_err(|e| ApiError::from_app_err(e, Some(trace_id)))?;
+        .map_err(ApiError::from_app_err)?;
     Ok(Json(to_public_view(&session)))
 }
 
@@ -141,15 +134,13 @@ pub struct GetSessionQuery {
 
 async fn get_session(
     State(state): State<Arc<AppState>>,
-    Extension(trace): Extension<RequestTrace>,
     Path(session_id): Path<Uuid>,
     Query(q): Query<GetSessionQuery>,
 ) -> Result<Json<SessionPublicView>, ApiError> {
-    let trace_id = trace.trace_id.clone();
     tracing::info!(user_id = %q.user_id, "get_game_session");
     let session = get_game_session(&state.deps, GameSessionId(session_id), UserId(q.user_id))
         .await
-        .map_err(|e| ApiError::from_app_err(e, Some(trace_id)))?;
+        .map_err(ApiError::from_app_err)?;
     Ok(Json(to_public_view(&session)))
 }
 
@@ -162,11 +153,9 @@ pub struct AnswerReq {
 
 async fn submit_step_answer(
     State(state): State<Arc<AppState>>,
-    Extension(trace): Extension<RequestTrace>,
     Path((session_id, step_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<AnswerReq>,
 ) -> Result<Json<AnswerResp>, ApiError> {
-    let trace_id = trace.trace_id.clone();
     tracing::info!(user_id = %body.user_id, "submit_answer");
     let cmd = SubmitAnswerCommand {
         session_id: GameSessionId(session_id),
@@ -176,7 +165,7 @@ async fn submit_step_answer(
     };
     let session = submit_answer(&state.deps, cmd)
         .await
-        .map_err(|e| ApiError::from_app_err(e, Some(trace_id.clone())))?;
+        .map_err(ApiError::from_app_err)?;
     let current = session.current_step();
     let eval = current.and_then(|s| s.evaluation.clone());
     Ok(Json(AnswerResp {
@@ -186,7 +175,6 @@ async fn submit_step_answer(
         next_state: current.map(|s| s.state).unwrap_or(StepState::Pending),
         current_score: ScoreDto::from(&session.score),
         session_state: session.state,
-        trace_id,
     }))
 }
 
@@ -199,19 +187,16 @@ pub struct AnswerResp {
     pub next_state: StepState,
     pub current_score: ScoreDto,
     pub session_state: GameSessionState,
-    pub trace_id: String,
 }
 
 async fn advance(
     State(state): State<Arc<AppState>>,
-    Extension(trace): Extension<RequestTrace>,
     Path(session_id): Path<Uuid>,
     Json(body): Json<UserActionBody>,
 ) -> Result<Json<SessionPublicView>, ApiError> {
-    let trace_id = trace.trace_id.clone();
     let session = advance_session(&state.deps, GameSessionId(session_id), UserId(body.user_id))
         .await
-        .map_err(|e| ApiError::from_app_err(e, Some(trace_id)))?;
+        .map_err(ApiError::from_app_err)?;
     Ok(Json(to_public_view(&session)))
 }
 
@@ -223,14 +208,12 @@ pub struct ResultQuery {
 
 async fn result(
     State(state): State<Arc<AppState>>,
-    Extension(trace): Extension<RequestTrace>,
     Path(session_id): Path<Uuid>,
     Query(q): Query<ResultQuery>,
 ) -> Result<Json<shakti_game_domain::GameResult>, ApiError> {
-    let trace_id = trace.trace_id.clone();
     let res = get_game_result(&state.deps, GameSessionId(session_id), UserId(q.user_id))
         .await
-        .map_err(|e| ApiError::from_app_err(e, Some(trace_id)))?;
+        .map_err(ApiError::from_app_err)?;
     Ok(Json(res))
 }
 
