@@ -1,0 +1,23 @@
+pub mod answer;
+pub mod content;
+pub mod engine;
+pub mod errors;
+pub mod game_session;
+pub mod game_step;
+pub mod gap_fill;
+pub mod ids;
+pub mod policies;
+pub mod result;
+pub mod score;
+
+pub use answer::{ExpectedAnswer, StepEvaluation, UserAnswer};
+pub use content::{LearningItem, PreparedContent, PreparedItem};
+pub use engine::{GameEngine, GameEngineRegistry};
+pub use errors::DomainError;
+pub use game_session::{GameSession, GameSessionState};
+pub use game_step::{GameStep, StepPrompt, StepState};
+pub use gap_fill::GapFillEngine;
+pub use ids::{GameDefinitionId, GameSessionId, GameStepId, LearningItemId, UserId};
+pub use policies::{GameDefinition, GameKind, GapFillConfig, ScoringPolicy, TimingPolicy};
+pub use result::GameResult;
+pub use score::Score;

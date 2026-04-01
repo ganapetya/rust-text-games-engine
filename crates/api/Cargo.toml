@@ -1,0 +1,22 @@
+[package]
+name = "shakti-game-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+shakti-game-domain = { path = "../domain" }
+shakti-game-application = { path = "../application" }
+shakti-game-infrastructure = { path = "../infrastructure" }
+axum = { version = "0.8", features = ["macros", "json"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+hyper = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde", "v4"] }
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+thiserror = "2"
+tracing = "0.1"
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres"] }
+tokio = { version = "1", features = ["full"] }
