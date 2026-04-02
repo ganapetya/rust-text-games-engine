@@ -27,6 +27,22 @@ docker compose up --build
 - API: `http://127.0.0.1:8010`
 - Health: `GET /health`, readiness + DB: `GET /ready`
 
+### OpenAI (real LLM for gap-fill)
+
+**CI / automated integration tests** use **`GAME_ENGINE_LLM_MODE=mock`** (deterministic passage stitched from DB or inline inputs). **Manual play UI** checks against a **real model** use **`openai`** plus a key: the model is instructed to write an **original** passage in the session language (not a copy of your source texts).
+
+1. Create a single-line file **`openai.key.secret`** in this repo root (the file is gitignored) containing your API key, or set **`OPENAI_API_KEY`** in the environment.
+2. Optional: override file path with **`OPENAI_KEY_FILE`** (default `openai.key.secret`, relative to the process working directory — `/app` in the container).
+3. Set **`OPENAI_MODEL`** if needed (default in compose: `gpt-5.2`).
+4. **`GAME_ENGINE_LLM_MODE`**: `mock` (default in compose), `openai` for live calls, or omit when running the binary locally so that if a key is present the engine picks OpenAI automatically.
+5. For Docker, `docker-compose.yml` bind-mounts `./openai.key.secret` → `/app/openai.key.secret`. Create that file in the repo root before `GAME_ENGINE_LLM_MODE=openai docker compose up --build`. If the file is missing, compose may fail to start the engine container; use mock mode or add a placeholder line for local-only dev.
+
+The app logs structured **`openai_key_source`** as `none`, `env`, or `file` at startup (never logs the key).
+
+### Inline LLM inputs (play UI / API)
+
+`contentRequest` may include **`llmSourceTexts`** (non-empty strings → skip DB learning rows; requires **`language`**) and **`llmHardWords`** (non-empty list → skip DB vocabulary for the prompt). See the **shakti-game-play-ui** client.
+
 ### Troubleshooting: `VersionMismatch(20250401000001)` (or similar)
 
 SQLx stores a **checksum** per applied migration in `_sqlx_migrations`. This error means the migration **file on disk** (baked into the binary) no longer matches the checksum recorded when that version first ran—usually because an old `migrations/*.sql` was **edited after it was already applied**, while the **Postgres Docker volume** still holds the old checksum.

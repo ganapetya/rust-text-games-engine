@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use shakti_game_domain::{GameDefinition, LearningItem, PassageGapLlmOutput, UserId};
 use shakti_game_engine_core::llm::{
     parse_passage_gap_response, passage_gap_system_prompt, passage_gap_user_message_json,
+    reconcile_hard_word_spans,
 };
 use shakti_game_engine_core::{AppError, LlmContentPreparer};
 use std::sync::Arc;
@@ -58,7 +59,7 @@ impl LlmContentPreparer for OpenAiGapFillPreparer {
 
         let system_msg = ChatCompletionRequestSystemMessage {
             content: ChatCompletionRequestSystemMessageContent::Text(
-                passage_gap_system_prompt(max_words),
+                passage_gap_system_prompt(max_words, language),
             ),
             name: None,
         };
@@ -101,8 +102,17 @@ impl LlmContentPreparer for OpenAiGapFillPreparer {
             .and_then(|c| c.message.content.clone())
             .ok_or_else(|| AppError::LlmPreparation("empty openai response".into()))?;
 
-        let out =
+        let mut out =
             parse_passage_gap_response(&text).map_err(AppError::LlmPreparation)?;
+        let model_gap_count = out.hard_words.len();
+        reconcile_hard_word_spans(&mut out).map_err(AppError::LlmPreparation)?;
+        tracing::info!(
+            user_id = %user_id.0,
+            trace_id = trace_id.unwrap_or(""),
+            model_gap_entries = model_gap_count,
+            kept_gaps = out.hard_words.len(),
+            "passage hard_words reconciled (orphan model entries dropped if not in full_text)"
+        );
         out.validate()
             .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
         Ok(out)

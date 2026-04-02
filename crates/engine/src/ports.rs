@@ -13,6 +13,13 @@ pub struct ContentRequest {
     pub source: String,
     pub limit: i64,
     pub language: Option<String>,
+    /// When set to at least one non-empty string after trim, DB learning rows are skipped;
+    /// items are synthesized for the LLM prompt ([`crate::services::start_game_session`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm_source_texts: Option<Vec<String>>,
+    /// When set, registered hard words are not loaded from the DB; use this list for the LLM.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm_hard_words: Option<Vec<String>>,
 }
 
 #[async_trait]

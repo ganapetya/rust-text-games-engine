@@ -57,10 +57,25 @@ pub async fn start_game_session(
         ));
     }
 
-    let vocabulary = deps
-        .hard_words
-        .fetch_registered(user_id, &lang)
-        .await?; // user's registered vocabulary for the target language
+    let vocabulary: Vec<String> = match &deferred.content_request.llm_hard_words {
+        Some(words) => {
+            let w: Vec<String> = words
+                .iter()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if w.is_empty() {
+                return Err(AppError::BadRequest(
+                    "llm_hard_words must contain at least one non-empty word when provided".into(),
+                ));
+            }
+            w
+        }
+        None => deps
+            .hard_words
+            .fetch_registered(user_id, &lang)
+            .await?, // user's registered vocabulary for the target language
+    };
     if vocabulary.is_empty() {
         return Err(AppError::BadRequest(
             "no registered hard words for this language".into(),

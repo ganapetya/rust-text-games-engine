@@ -13,6 +13,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(filter)
         .init();
 
+    tracing::info!(
+        llm_mode = ?config.llm_mode,
+        openai_model = %config.openai_model,
+        openai_key_source = config.openai_key_source.as_str(),
+        "game engine config loaded"
+    );
+
     let pool = support::connect_pool(&config.database_url).await?;
     support::run_migrations(&pool).await?;
 

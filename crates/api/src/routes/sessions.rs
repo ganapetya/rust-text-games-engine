@@ -52,6 +52,10 @@ pub struct ContentReqDto {
     #[serde(default = "default_limit")]
     pub limit: i64,
     pub language: Option<String>,
+    #[serde(default)]
+    pub llm_source_texts: Option<Vec<String>>,
+    #[serde(default)]
+    pub llm_hard_words: Option<Vec<String>>,
 }
 
 fn default_source() -> String {
@@ -91,6 +95,8 @@ async fn create_session(
             source: body.content_request.source,
             limit: body.content_request.limit,
             language: body.content_request.language,
+            llm_source_texts: body.content_request.llm_source_texts,
+            llm_hard_words: body.content_request.llm_hard_words,
         },
         options: SessionOptions {
             step_time_limit_secs: body.options.step_time_limit_secs,

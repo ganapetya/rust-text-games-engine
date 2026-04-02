@@ -34,7 +34,8 @@ pub fn build_llm_preparer(
         LlmMode::Mock => Ok(Arc::new(MockLlmContentPreparer)),
         LlmMode::OpenAi => {
             let key = openai_api_key.filter(|s| !s.is_empty()).ok_or_else(|| {
-                "OPENAI_API_KEY is required when GAME_ENGINE_LLM_MODE=openai".to_string()
+                "OpenAI API key required: set OPENAI_API_KEY, or place the key in openai.key.secret (or OPENAI_KEY_FILE), when using openai LLM mode"
+                    .to_string()
             })?;
             Ok(OpenAiGapFillPreparer::new(key, openai_model).into_arc())
         }

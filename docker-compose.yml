@@ -24,13 +24,16 @@ services:
       RUST_LOG: ${RUST_LOG:-info}
       APP_PORT: "8010"
       GAME_ENGINE_LLM_MODE: ${GAME_ENGINE_LLM_MODE:-mock}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      # OPENAI_API_KEY: set when GAME_ENGINE_LLM_MODE=openai
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.2}
+      # OPENAI_API_KEY: optional; otherwise mount openai.key.secret (see README)
     ports:
       - "127.0.0.1:8010:8010"
     depends_on:
       shakti-game-db:
         condition: service_healthy
+    # Repo-root file (gitignored). Create it before `GAME_ENGINE_LLM_MODE=openai docker compose up`.
+    volumes:
+      - ./openai.key.secret:/app/openai.key.secret:ro
 
 volumes:
   shakti-game-pg:
