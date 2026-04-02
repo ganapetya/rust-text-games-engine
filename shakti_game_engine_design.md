@@ -405,7 +405,7 @@ A single interactive unit.
 ```rust
 pub struct GameStep {
     pub id: GameStepId,
-    pub prompt: StepPrompt,
+    pub user_facing_step_prompt: UserFacingStepPrompt,
     pub expected_answer: ExpectedAnswer,
     pub user_answer: Option<UserAnswer>,
     pub evaluation: Option<StepEvaluation>,
@@ -899,7 +899,7 @@ Fields:
 - session_id UUID FK
 - ordinal INT
 - state TEXT
-- prompt JSONB
+- user_facing_step_prompt JSONB
 - expected_answer JSONB
 - user_answer JSONB NULL
 - evaluation JSONB NULL

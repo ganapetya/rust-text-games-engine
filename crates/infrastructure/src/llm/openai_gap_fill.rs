@@ -55,7 +55,9 @@ impl LlmContentPreparer for OpenAiGapFillPreparer {
         );
 
         let system_msg = ChatCompletionRequestSystemMessage {
-            content: ChatCompletionRequestSystemMessageContent::Text(gap_fill_system_prompt().into()),
+            content: ChatCompletionRequestSystemMessageContent::Text(
+                gap_fill_system_prompt().into(),
+            ),
             name: None,
         };
 

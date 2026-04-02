@@ -52,7 +52,7 @@ pub trait ContentProvider: Send + Sync {
     ) -> Result<Vec<LearningItem>, AppError>;
 }
 
-/// Async preparation step: prompt + items → validated [`LearningItem`] list for [`GapFillEngine`].
+/// Async LLM preparation: model instructions + items → validated [`LearningItem`] list for [`GapFillEngine`].
 #[async_trait]
 pub trait LlmContentPreparer: Send + Sync {
     async fn prepare_gap_fill_learning_items(

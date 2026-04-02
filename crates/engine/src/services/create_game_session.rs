@@ -75,7 +75,7 @@ pub async fn create_game_session(
         )));
     }
 
-    // --- Optional async LLM: rewrite/enrich items (prompt + JSON) before domain preparation ---
+    // --- Optional async LLM: rewrite/enrich items (LLM messages + JSON) before domain preparation ---
     // When disabled, we keep the DB-backed `items` as-is. When enabled, `LlmContentPreparer`
     // returns a new `Vec<LearningItem>` that must still cover at least `need` entries.
     let items = if cmd.options.llm_preparation_enabled {

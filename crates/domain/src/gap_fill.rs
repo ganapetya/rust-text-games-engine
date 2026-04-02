@@ -3,7 +3,7 @@ use crate::content::{ContentProvenance, LearningItem, PreparedContent, PreparedI
 use crate::engine::GameEngine;
 use crate::errors::DomainError;
 use crate::game_session::GameSession;
-use crate::game_step::{GameStep, StepPrompt, StepState};
+use crate::game_step::{GameStep, StepState, UserFacingStepPrompt};
 use crate::ids::GameStepId;
 use crate::policies::{GameDefinition, GameKind, GapFillConfig};
 use crate::result::GameResult;
@@ -139,14 +139,14 @@ impl GameEngine for GapFillEngine {
             let seed = ordinal as u64 ^ item.id.0.as_u128() as u64;
             let distractors =
                 Self::pick_distractors(&correct, &others, config.distractors_per_step, seed);
-            let prompt = StepPrompt::GapFill {
+            let user_facing_step_prompt = UserFacingStepPrompt::GapFill {
                 text_with_gap: text,
                 choices: distractors,
             };
             steps.push(GameStep {
                 id: GameStepId(Uuid::new_v4()),
                 ordinal,
-                prompt,
+                user_facing_step_prompt,
                 expected_answer: ExpectedAnswer::ExactText { value: correct },
                 user_answer: None,
                 evaluation: None,

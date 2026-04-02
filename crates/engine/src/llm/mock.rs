@@ -27,11 +27,7 @@ impl LlmContentPreparer for MockLlmContentPreparer {
         );
         let mut out = Vec::with_capacity(items.len());
         for mut li in items.iter().cloned() {
-            let mut meta = li
-                .metadata
-                .as_object()
-                .cloned()
-                .unwrap_or_default();
+            let mut meta = li.metadata.as_object().cloned().unwrap_or_default();
             meta.insert(
                 "llm_preparation".to_string(),
                 json!({ "mode": "mock", "prepared": true }),

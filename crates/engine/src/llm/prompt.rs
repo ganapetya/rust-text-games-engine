@@ -14,7 +14,10 @@ The caller will use at most `steps_count` items in order; ensure the first `step
 }
 
 /// User message payload: items + config hints for the model.
-pub fn gap_fill_user_message_json(items: &[LearningItem], config: &GapFillConfig) -> serde_json::Value {
+pub fn gap_fill_user_message_json(
+    items: &[LearningItem],
+    config: &GapFillConfig,
+) -> serde_json::Value {
     json!({
         "learning_items": items,
         "steps_count": config.steps_count,

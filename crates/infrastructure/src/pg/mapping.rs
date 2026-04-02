@@ -52,7 +52,7 @@ pub fn step_from_json(
     id: Uuid,
     ordinal: i32,
     state: &str,
-    prompt: serde_json::Value,
+    user_facing_step_prompt: serde_json::Value,
     expected: serde_json::Value,
     user_answer: Option<serde_json::Value>,
     evaluation: Option<serde_json::Value>,
@@ -61,7 +61,8 @@ pub fn step_from_json(
     Ok(GameStep {
         id: shakti_game_domain::GameStepId(id),
         ordinal: ordinal as usize,
-        prompt: serde_json::from_value(prompt).map_err(|e| AppError::Repository(e.to_string()))?,
+        user_facing_step_prompt: serde_json::from_value(user_facing_step_prompt)
+            .map_err(|e| AppError::Repository(e.to_string()))?,
         expected_answer: serde_json::from_value(expected)
             .map_err(|e| AppError::Repository(e.to_string()))?,
         user_answer: user_answer

@@ -49,7 +49,7 @@ impl GameSessionRepository for PgGameSessionRepository {
         .map_err(|e| AppError::Repository(e.to_string()))?;
 
         for step in &session.steps {
-            let prompt = serde_json::to_value(&step.prompt)
+            let user_facing_step_prompt = serde_json::to_value(&step.user_facing_step_prompt)
                 .map_err(|e| AppError::Repository(e.to_string()))?;
             let expected = serde_json::to_value(&step.expected_answer)
                 .map_err(|e| AppError::Repository(e.to_string()))?;
@@ -68,7 +68,7 @@ impl GameSessionRepository for PgGameSessionRepository {
 
             sqlx::query(
                 r#"INSERT INTO game_steps (
-                    id, session_id, ordinal, state, prompt, expected_answer,
+                    id, session_id, ordinal, state, user_facing_step_prompt, expected_answer,
                     user_answer, evaluation, deadline_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"#,
             )
@@ -76,7 +76,7 @@ impl GameSessionRepository for PgGameSessionRepository {
             .bind(session.id.0)
             .bind(step.ordinal as i32)
             .bind(step_state_to_db(step.state))
-            .bind(prompt)
+            .bind(user_facing_step_prompt)
             .bind(expected)
             .bind(ua)
             .bind(ev)
@@ -129,7 +129,7 @@ impl GameSessionRepository for PgGameSessionRepository {
         let expires_at: Option<time::OffsetDateTime> = row.try_get("expires_at").ok();
 
         let step_rows = sqlx::query(
-            r#"SELECT id, ordinal, state, prompt, expected_answer, user_answer, evaluation, deadline_at
+            r#"SELECT id, ordinal, state, user_facing_step_prompt, expected_answer, user_answer, evaluation, deadline_at
                FROM game_steps WHERE session_id = $1 ORDER BY ordinal ASC"#,
         )
         .bind(sid)
@@ -148,8 +148,8 @@ impl GameSessionRepository for PgGameSessionRepository {
             let st: String = sr
                 .try_get("state")
                 .map_err(|e| AppError::Repository(e.to_string()))?;
-            let prompt: serde_json::Value = sr
-                .try_get("prompt")
+            let user_facing_step_prompt: serde_json::Value = sr
+                .try_get("user_facing_step_prompt")
                 .map_err(|e| AppError::Repository(e.to_string()))?;
             let expected: serde_json::Value = sr
                 .try_get("expected_answer")
@@ -157,7 +157,16 @@ impl GameSessionRepository for PgGameSessionRepository {
             let ua: Option<serde_json::Value> = sr.try_get("user_answer").ok();
             let ev: Option<serde_json::Value> = sr.try_get("evaluation").ok();
             let dl: Option<time::OffsetDateTime> = sr.try_get("deadline_at").ok();
-            steps.push(step_from_json(id, ord, &st, prompt, expected, ua, ev, dl)?);
+            steps.push(step_from_json(
+                id,
+                ord,
+                &st,
+                user_facing_step_prompt,
+                expected,
+                ua,
+                ev,
+                dl,
+            )?);
         }
 
         let def_row = sqlx::query(
@@ -220,7 +229,7 @@ impl GameSessionRepository for PgGameSessionRepository {
         .map_err(|e| AppError::Repository(e.to_string()))?;
 
         for step in &session.steps {
-            let prompt = serde_json::to_value(&step.prompt)
+            let user_facing_step_prompt = serde_json::to_value(&step.user_facing_step_prompt)
                 .map_err(|e| AppError::Repository(e.to_string()))?;
             let expected = serde_json::to_value(&step.expected_answer)
                 .map_err(|e| AppError::Repository(e.to_string()))?;
@@ -240,7 +249,7 @@ impl GameSessionRepository for PgGameSessionRepository {
             sqlx::query(
                 r#"UPDATE game_steps SET
                     state = $2,
-                    prompt = $3,
+                    user_facing_step_prompt = $3,
                     expected_answer = $4,
                     user_answer = $5,
                     evaluation = $6,
@@ -250,7 +259,7 @@ impl GameSessionRepository for PgGameSessionRepository {
             )
             .bind(step.id.0)
             .bind(step_state_to_db(step.state))
-            .bind(prompt)
+            .bind(user_facing_step_prompt)
             .bind(expected)
             .bind(ua)
             .bind(ev)

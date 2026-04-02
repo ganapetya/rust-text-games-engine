@@ -1,4 +1,4 @@
-//! LLM-assisted preparation: prompt + learning items → validated JSON → domain [`LearningItem`]s.
+//! LLM-assisted preparation: model prompts + learning items → validated JSON → domain [`LearningItem`]s.
 //! Implementations live here ([`MockLlmContentPreparer`]) and in `shakti-game-infrastructure` (OpenAI).
 
 mod json;

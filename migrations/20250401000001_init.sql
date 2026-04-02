@@ -33,7 +33,7 @@ CREATE TABLE game_steps (
     session_id UUID NOT NULL REFERENCES game_sessions(id) ON DELETE CASCADE,
     ordinal INT NOT NULL,
     state TEXT NOT NULL,
-    prompt JSONB NOT NULL,
+    user_facing_step_prompt JSONB NOT NULL,
     expected_answer JSONB NOT NULL,
     user_answer JSONB NULL,
     evaluation JSONB NULL,

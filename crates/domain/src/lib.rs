@@ -15,7 +15,7 @@ pub use content::{LearningItem, PreparedContent, PreparedItem};
 pub use engine::{GameEngine, GameEngineRegistry};
 pub use errors::DomainError;
 pub use game_session::{GameSession, GameSessionState};
-pub use game_step::{GameStep, StepPrompt, StepState};
+pub use game_step::{GameStep, StepState, UserFacingStepPrompt};
 pub use gap_fill::GapFillEngine;
 pub use ids::{GameDefinitionId, GameSessionId, GameStepId, LearningItemId, UserId};
 pub use policies::{GameDefinition, GameKind, GapFillConfig, ScoringPolicy, TimingPolicy};

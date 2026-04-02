@@ -14,9 +14,10 @@ pub enum StepState {
     Skipped,
 }
 
+/// Payload shown to the player for one step (API / UI). Distinct from internal engine-only state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum StepPrompt {
+pub enum UserFacingStepPrompt {
     GapFill {
         text_with_gap: String,
         choices: Vec<String>,
@@ -27,7 +28,8 @@ pub enum StepPrompt {
 pub struct GameStep {
     pub id: GameStepId,
     pub ordinal: usize,
-    pub prompt: StepPrompt,
+    #[serde(rename = "userFacingStepPrompt")]
+    pub user_facing_step_prompt: UserFacingStepPrompt,
     pub expected_answer: ExpectedAnswer,
     pub user_answer: Option<UserAnswer>,
     pub evaluation: Option<StepEvaluation>,

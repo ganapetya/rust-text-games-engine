@@ -5,8 +5,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use shakti_game_domain::{
-    GameKind, GameSession, GameSessionId, GameSessionState, GameStep, StepPrompt, StepState,
-    UserAnswer, UserId,
+    GameKind, GameSession, GameSessionId, GameSessionState, GameStep, StepState, UserAnswer,
+    UserFacingStepPrompt, UserId,
 };
 use shakti_game_engine_core::{
     advance_session, create_game_session, get_game_result, get_game_session, start_game_session,
@@ -238,7 +238,7 @@ pub struct StepPublic {
     pub id: Uuid,
     pub ordinal: usize,
     pub state: StepState,
-    pub prompt: StepPrompt,
+    pub user_facing_step_prompt: UserFacingStepPrompt,
     pub user_answer: Option<UserAnswer>,
     pub evaluation: Option<shakti_game_domain::StepEvaluation>,
 }
@@ -279,7 +279,7 @@ fn step_public(step: &GameStep) -> StepPublic {
         id: step.id.0,
         ordinal: step.ordinal,
         state: step.state,
-        prompt: step.prompt.clone(),
+        user_facing_step_prompt: step.user_facing_step_prompt.clone(),
         user_answer: step.user_answer.clone(),
         evaluation: step.evaluation.clone(),
     }

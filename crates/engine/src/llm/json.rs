@@ -11,10 +11,7 @@ pub fn strip_code_fences(s: &str) -> String {
     let t = s.trim();
     if let Some(rest) = t.strip_prefix("```") {
         let rest = rest.trim_start();
-        let rest = rest
-            .strip_prefix("json")
-            .unwrap_or(rest)
-            .trim_start();
+        let rest = rest.strip_prefix("json").unwrap_or(rest).trim_start();
         if let Some(idx) = rest.rfind("```") {
             return rest[..idx].trim().to_string();
         }
