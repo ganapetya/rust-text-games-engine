@@ -1,27 +1,36 @@
 use serde_json::json;
-use shakti_game_domain::{GapFillConfig, LearningItem};
+use shakti_game_domain::{GameConfig, GameDefinition, LearningItem};
 
-pub fn gap_fill_system_prompt() -> &'static str {
-    r#"You are a content preparation assistant for a language-learning gap-fill game.
-You receive JSON describing learning items (source text, hard fragment to hide, language, etc.).
+/// System prompt: single JSON object with passage + hard word character spans + fake words.
+pub fn passage_gap_system_prompt(max_passage_words: u32) -> String {
+    format!(
+        r#"You write coherent prose for a language-learning gap-fill game.
 
-Respond with ONLY valid JSON (no markdown fences, no commentary) matching this shape:
-{"learning_items":[<LearningItem>,...]}
+Respond with ONLY valid JSON (no markdown fences, no commentary) matching exactly:
+{{"schema_version":1,"full_text":"...","hard_words":[{{"id":0,"start_char":0,"end_char":0,"surface":"..."}}],"fake_words":["..."]}}
 
-Each LearningItem must include: id, user_id, source_text, context_text (nullable), hard_fragment, lemma (nullable), language, metadata (object).
-Preserve id and user_id from the input. You may enrich context_text, lemma, or metadata for pedagogy.
-The caller will use at most `steps_count` items in order; ensure the first `steps_count` items are the best choices if you reorder."#
+Rules:
+- full_text must be at most {max_passage_words} words.
+- hard_words: each entry is a hard vocabulary word that appears in full_text as the substring full_text[start_char..end_char] (Unicode scalar indices); surface must match that slice exactly.
+- ids are distinct small integers matching the word identity.
+- fake_words: plausible distractors for gaps; should not duplicate any hard word surface.
+- The topic should relate to summaries of the provided learning items (history snippets)."#
+    )
 }
 
-/// User message payload: items + config hints for the model.
-pub fn gap_fill_user_message_json(
+/// User payload: items, registered words, target language, definition hints.
+pub fn passage_gap_user_message_json(
     items: &[LearningItem],
-    config: &GapFillConfig,
+    registered_hard_words: &[String],
+    language: &str,
+    definition: &GameDefinition,
 ) -> serde_json::Value {
+    let GameConfig::GapFill(gap) = &definition.config;
     json!({
+        "language": language,
         "learning_items": items,
-        "steps_count": config.steps_count,
-        "distractors_per_step": config.distractors_per_step,
-        "allow_skip": config.allow_skip,
+        "registered_hard_words": registered_hard_words,
+        "distractors_per_gap": gap.distractors_per_gap,
+        "scoring_mode": gap.scoring_mode,
     })
 }

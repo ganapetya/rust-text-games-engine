@@ -66,8 +66,6 @@ fn default_limit() -> i64 {
 #[serde(rename_all = "camelCase")]
 pub struct SessionOptionsDto {
     pub step_time_limit_secs: Option<u32>,
-    #[serde(default)]
-    pub llm_preparation_enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -96,7 +94,6 @@ async fn create_session(
         },
         options: SessionOptions {
             step_time_limit_secs: body.options.step_time_limit_secs,
-            llm_preparation_enabled: body.options.llm_preparation_enabled,
         },
     };
     let session = create_game_session(&state.deps, cmd)
@@ -117,12 +114,17 @@ pub struct UserActionBody {
 }
 
 async fn start_session(
+    Extension(trace): Extension<RequestTrace>,
     State(state): State<Arc<AppState>>,
     Path(session_id): Path<Uuid>,
     Json(body): Json<UserActionBody>,
 ) -> Result<Json<SessionPublicView>, ApiError> {
     let sid = GameSessionId(session_id);
-    tracing::info!(user_id = %body.user_id, "start_game_session");
+    tracing::info!(
+        user_id = %body.user_id,
+        trace_id = %trace.trace_id,
+        "start_game_session"
+    );
     let session = start_game_session(&state.deps, sid, UserId(body.user_id))
         .await
         .map_err(ApiError::from_app_err)?;

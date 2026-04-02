@@ -35,4 +35,10 @@ pub enum DomainError {
 
     #[error("not enough learning items (need {need}, got {got})")]
     NotEnoughItems { need: usize, got: usize },
+
+    #[error("invalid passage context: {0}")]
+    InvalidPassageContext(String),
+
+    #[error("missing passage in prepared content")]
+    MissingPassage,
 }

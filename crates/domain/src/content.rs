@@ -1,4 +1,5 @@
 use crate::ids::{LearningItemId, UserId};
+use crate::passage::PassageGapLlmOutput;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
@@ -29,4 +30,7 @@ pub struct ContentProvenance {
 pub struct PreparedContent {
     pub items: Vec<PreparedItem>,
     pub provenance: ContentProvenance,
+    /// Set after LLM validation when building a passage session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub passage: Option<PassageGapLlmOutput>,
 }

@@ -6,7 +6,7 @@ use shakti_game_domain::{GameEngineRegistry, GapFillEngine};
 use shakti_game_engine_core::{EngineDeps, LlmContentPreparer};
 use shakti_game_infrastructure::{
     build_llm_preparer, DbContentProvider, PgGameDefinitionRepository, PgGameSessionRepository,
-    PgSessionEventRepository, SystemClock,
+    PgHardWordsRepository, PgSessionEventRepository, SystemClock,
 };
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
@@ -34,6 +34,7 @@ pub fn build_engine_deps(
         sessions: Arc::new(PgGameSessionRepository::new(pool.clone())),
         definitions: Arc::new(PgGameDefinitionRepository::new(pool.clone())),
         content: Arc::new(DbContentProvider::new(pool.clone())),
+        hard_words: Arc::new(PgHardWordsRepository::new(pool.clone())),
         events: Arc::new(PgSessionEventRepository::new(pool.clone())),
         clock: Arc::new(SystemClock),
         engines,

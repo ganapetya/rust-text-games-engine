@@ -27,11 +27,28 @@ docker compose up --build
 - API: `http://127.0.0.1:8010`
 - Health: `GET /health`, readiness + DB: `GET /ready`
 
+### Troubleshooting: `VersionMismatch(20250401000001)` (or similar)
+
+SQLx stores a **checksum** per applied migration in `_sqlx_migrations`. This error means the migration **file on disk** (baked into the binary) no longer matches the checksum recorded when that version first ran—usually because an old `migrations/*.sql` was **edited after it was already applied**, while the **Postgres Docker volume** still holds the old checksum.
+
+**Local dev (safe to wipe data):** reset the database volume and start again:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+**Rule of thumb:** never change the contents of a migration that has already run in an environment you care about; add a **new** migration file instead. For shared/prod databases, coordinate checksum fixes with your DB team (avoid ad-hoc edits to `_sqlx_migrations`).
+
 ## Seeded dev user
 
 Migrations seed sample `learning_items` for user id:
 
 `11111111-1111-1111-1111-111111111111`
+
+## Browser play UI (optional)
+
+A small **standalone** Vite + TypeScript client for manual testing lives in the sibling project **`shakti-game-play-ui`** (same parent directory as this repo). Run the engine (`docker compose up`), then `npm run dev` in that UI; it proxies `/api` to `http://127.0.0.1:8010` by default. See that project’s README for env vars and production builds.
 
 ## Example API flow
 
@@ -65,20 +82,12 @@ Get session:
 curl -s 'http://127.0.0.1:8010/api/v1/game-sessions/SESSION_ID?userId=11111111-1111-1111-1111-111111111111'
 ```
 
-Submit answer (replace `STEP_ID` from session view):
+Submit answer for passage gap-fill (replace `STEP_ID` from session view; `selections` in gap order, ordinal 0…n−1):
 
 ```bash
 curl -s -X POST http://127.0.0.1:8010/api/v1/game-sessions/SESSION_ID/steps/STEP_ID/answer \
   -H 'Content-Type: application/json' \
-  -d '{"userId":"11111111-1111-1111-1111-111111111111","answer":{"type":"text","value":"gikk"}}'
-```
-
-Advance to next step:
-
-```bash
-curl -s -X POST http://127.0.0.1:8010/api/v1/game-sessions/SESSION_ID/advance \
-  -H 'Content-Type: application/json' \
-  -d '{"userId":"11111111-1111-1111-1111-111111111111"}'
+  -d '{"userId":"11111111-1111-1111-1111-111111111111","answer":{"type":"gap_fill_slots","selections":["gikk","svart","regner","leser","hjem"]}}'
 ```
 
 Result (after session finished):

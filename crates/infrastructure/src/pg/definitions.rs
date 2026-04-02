@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use shakti_game_domain::{
-    GameDefinition, GameDefinitionId, GameKind, GapFillConfig, ScoringPolicy, TimingPolicy,
+    GameConfig, GameDefinition, GameDefinitionId, GameKind, ScoringPolicy, TimingPolicy,
 };
 use shakti_game_engine_core::{AppError, GameDefinitionRepository};
 use sqlx::{PgPool, Row};
@@ -42,7 +42,7 @@ impl PgGameDefinitionRepository {
             "gap_fill" => GameKind::GapFill,
             _ => return Err(AppError::Repository(format!("unknown game kind {kind}"))),
         };
-        let config: GapFillConfig =
+        let config: GameConfig =
             serde_json::from_value(config).map_err(|e| AppError::Repository(e.to_string()))?;
         let scoring_policy: ScoringPolicy = serde_json::from_value(scoring_policy)
             .map_err(|e| AppError::Repository(e.to_string()))?;

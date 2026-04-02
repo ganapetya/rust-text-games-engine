@@ -62,10 +62,11 @@ pub async fn submit_answer(
 
     let definition = session.definition().map_err(AppError::Domain)?.clone();
     let engine = deps.engines.get(definition.kind)?;
-    let evaluation = engine.evaluate_answer(&step, &cmd.answer, now, &definition.config)?;
+    let evaluation = engine.evaluate_answer(&step, &cmd.answer, now, &definition)?; // per-gap or all-or-nothing scoring
 
-    session.record_evaluation(step_index, evaluation.clone(), now)?;
-    deps.sessions.update(&session).await?;
+    let submitted = cmd.answer.clone();
+    session.record_evaluation(step_index, evaluation.clone(), submitted, now)?; // persists score, may complete session
+    deps.sessions.update(&session).await?; // write `user_answer` + `evaluation` JSON on the step row
     deps.events
         .append(
             cmd.session_id,
@@ -74,6 +75,7 @@ pub async fn submit_answer(
                 "step_id": cmd.step_id,
                 "correct": evaluation.is_correct,
                 "points": evaluation.awarded_points,
+                "gap_stats": evaluation.gap_stats,
             }),
         )
         .await?;

@@ -14,13 +14,21 @@ pub enum StepState {
     Skipped,
 }
 
+/// One gap in the passage UI: shuffled choices (correct + distractors).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GapFillSlotPublic {
+    pub ordinal: usize,
+    pub choices: Vec<String>,
+}
+
 /// Payload shown to the player for one step (API / UI). Distinct from internal engine-only state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UserFacingStepPrompt {
-    GapFill {
-        text_with_gap: String,
-        choices: Vec<String>,
+    GapFillPassage {
+        /// Passage with `___` markers in place of each hidden word (in ascending gap order).
+        text_with_gaps: String,
+        slots: Vec<GapFillSlotPublic>,
     },
 }
 

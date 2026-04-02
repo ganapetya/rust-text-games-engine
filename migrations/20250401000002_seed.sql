@@ -14,7 +14,7 @@ INSERT INTO game_definitions (
     'gap_fill',
     1,
     'Default gap fill',
-    '{"steps_count": 5, "distractors_per_step": 2, "allow_skip": false}'::jsonb,
+    '{"type":"gap_fill","max_passage_words":600,"distractors_per_gap":2,"allow_skip":false,"scoring_mode":"per_gap"}'::jsonb,
     '{"type": "fixed_per_correct", "points": 10}'::jsonb,
     '{"per_step_limit_secs": null, "session_limit_secs": null, "auto_advance_on_timeout": false}'::jsonb,
     true

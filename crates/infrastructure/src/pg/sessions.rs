@@ -2,7 +2,7 @@ use crate::pg::mapping::{
     session_state_from_db, session_state_to_db, step_from_json, step_state_to_db,
 };
 use async_trait::async_trait;
-use shakti_game_domain::{GameSession, GameSessionId, Score};
+use shakti_game_domain::{GameSession, GameSessionId, GameStep, Score};
 use shakti_game_engine_core::{AppError, GameSessionRepository};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
@@ -22,6 +22,8 @@ impl GameSessionRepository for PgGameSessionRepository {
     async fn insert(&self, session: &GameSession) -> Result<(), AppError> {
         let score_json = serde_json::to_value(&session.score)
             .map_err(|e| AppError::Repository(e.to_string()))?;
+        let base_context = session.base_context.clone();
+        let deferred = session.deferred_payload.clone();
 
         let mut tx = self
             .pool
@@ -32,8 +34,8 @@ impl GameSessionRepository for PgGameSessionRepository {
         sqlx::query(
             r#"INSERT INTO game_sessions (
                 id, user_id, definition_id, state, current_step_index, score,
-                started_at, completed_at, expires_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"#,
+                started_at, completed_at, expires_at, base_context, deferred_payload
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"#,
         )
         .bind(session.id.0)
         .bind(session.user_id.0)
@@ -44,6 +46,8 @@ impl GameSessionRepository for PgGameSessionRepository {
         .bind(session.started_at)
         .bind(session.completed_at)
         .bind(session.expires_at)
+        .bind(base_context)
+        .bind(deferred)
         .execute(&mut *tx)
         .await
         .map_err(|e| AppError::Repository(e.to_string()))?;
@@ -95,7 +99,7 @@ impl GameSessionRepository for PgGameSessionRepository {
     async fn get(&self, id: GameSessionId) -> Result<GameSession, AppError> {
         let row = sqlx::query(
             r#"SELECT id, user_id, definition_id, state, current_step_index, score,
-                      started_at, completed_at, expires_at
+                      started_at, completed_at, expires_at, base_context, deferred_payload
                FROM game_sessions WHERE id = $1"#,
         )
         .bind(id.0)
@@ -127,6 +131,11 @@ impl GameSessionRepository for PgGameSessionRepository {
         let started_at: Option<time::OffsetDateTime> = row.try_get("started_at").ok();
         let completed_at: Option<time::OffsetDateTime> = row.try_get("completed_at").ok();
         let expires_at: Option<time::OffsetDateTime> = row.try_get("expires_at").ok();
+        let base_context: serde_json::Value = row
+            .try_get("base_context")
+            .map_err(|e| AppError::Repository(e.to_string()))?;
+        let deferred_payload: Option<serde_json::Value> =
+            row.try_get("deferred_payload").ok();
 
         let step_rows = sqlx::query(
             r#"SELECT id, ordinal, state, user_facing_step_prompt, expected_answer, user_answer, evaluation, deadline_at
@@ -192,6 +201,8 @@ impl GameSessionRepository for PgGameSessionRepository {
             started_at,
             completed_at,
             expires_at,
+            base_context,
+            deferred_payload,
             definition: Some(definition),
         })
     }
@@ -214,6 +225,8 @@ impl GameSessionRepository for PgGameSessionRepository {
                 started_at = $5,
                 completed_at = $6,
                 expires_at = $7,
+                base_context = $8,
+                deferred_payload = $9,
                 updated_at = now()
                WHERE id = $1"#,
         )
@@ -224,6 +237,8 @@ impl GameSessionRepository for PgGameSessionRepository {
         .bind(session.started_at)
         .bind(session.completed_at)
         .bind(session.expires_at)
+        .bind(&session.base_context)
+        .bind(&session.deferred_payload)
         .execute(&mut *tx)
         .await
         .map_err(|e| AppError::Repository(e.to_string()))?;
@@ -258,6 +273,61 @@ impl GameSessionRepository for PgGameSessionRepository {
                    WHERE id = $1"#,
             )
             .bind(step.id.0)
+            .bind(step_state_to_db(step.state))
+            .bind(user_facing_step_prompt)
+            .bind(expected)
+            .bind(ua)
+            .bind(ev)
+            .bind(step.deadline_at)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| AppError::Repository(e.to_string()))?;
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| AppError::Repository(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn insert_steps(
+        &self,
+        session_id: GameSessionId,
+        steps: &[GameStep],
+    ) -> Result<(), AppError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| AppError::Repository(e.to_string()))?;
+
+        for step in steps {
+            let user_facing_step_prompt = serde_json::to_value(&step.user_facing_step_prompt)
+                .map_err(|e| AppError::Repository(e.to_string()))?;
+            let expected = serde_json::to_value(&step.expected_answer)
+                .map_err(|e| AppError::Repository(e.to_string()))?;
+            let ua = step
+                .user_answer
+                .as_ref()
+                .map(|a| serde_json::to_value(a))
+                .transpose()
+                .map_err(|e| AppError::Repository(e.to_string()))?;
+            let ev = step
+                .evaluation
+                .as_ref()
+                .map(|a| serde_json::to_value(a))
+                .transpose()
+                .map_err(|e| AppError::Repository(e.to_string()))?;
+
+            sqlx::query(
+                r#"INSERT INTO game_steps (
+                    id, session_id, ordinal, state, user_facing_step_prompt, expected_answer,
+                    user_answer, evaluation, deadline_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"#,
+            )
+            .bind(step.id.0)
+            .bind(session_id.0)
+            .bind(step.ordinal as i32)
             .bind(step_state_to_db(step.state))
             .bind(user_facing_step_prompt)
             .bind(expected)

@@ -1,12 +1,14 @@
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use shakti_game_domain::{
-    GameDefinition, GameSession, GameSessionId, GapFillConfig, LearningItem, UserId,
+    GameDefinition, GameSession, GameSessionId, GameStep, LearningItem, PassageGapLlmOutput,
+    UserId,
 };
 use time::OffsetDateTime;
 
 use crate::errors::AppError;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ContentRequest {
     pub source: String,
     pub limit: i64,
@@ -18,6 +20,12 @@ pub trait GameSessionRepository: Send + Sync {
     async fn insert(&self, session: &GameSession) -> Result<(), AppError>;
     async fn get(&self, id: GameSessionId) -> Result<GameSession, AppError>;
     async fn update(&self, session: &GameSession) -> Result<(), AppError>;
+    /// Inserts new step rows for a session (e.g. after materializing a draft on start).
+    async fn insert_steps(
+        &self,
+        session_id: GameSessionId,
+        steps: &[GameStep],
+    ) -> Result<(), AppError>;
 }
 
 #[async_trait]
@@ -52,14 +60,26 @@ pub trait ContentProvider: Send + Sync {
     ) -> Result<Vec<LearningItem>, AppError>;
 }
 
-/// Async LLM preparation: model instructions + items → validated [`LearningItem`] list for [`GapFillEngine`].
+/// User vocabulary (per language) for passage gap-fill prompts.
+#[async_trait]
+pub trait HardWordsRepository: Send + Sync {
+    async fn fetch_registered(
+        &self,
+        user_id: UserId,
+        language: &str,
+    ) -> Result<Vec<String>, AppError>;
+}
+
+/// Async LLM: learning history + hard words → validated [`PassageGapLlmOutput`].
 #[async_trait]
 pub trait LlmContentPreparer: Send + Sync {
-    async fn prepare_gap_fill_learning_items(
+    async fn build_passage_gap_context(
         &self,
         user_id: UserId,
         trace_id: Option<&str>,
-        items: &[LearningItem],
-        config: &GapFillConfig,
-    ) -> Result<Vec<LearningItem>, AppError>;
+        learning_items: &[LearningItem],
+        registered_hard_words: &[String],
+        language: &str,
+        definition: &GameDefinition,
+    ) -> Result<PassageGapLlmOutput, AppError>;
 }

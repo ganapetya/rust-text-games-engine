@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-/// Game family; v0.1 only supports gap_fill.
+/// Game family; only `gap_fill` is implemented (passage-based).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GameKind {
@@ -14,24 +14,52 @@ pub struct GameDefinition {
     pub kind: GameKind,
     pub version: i32,
     pub name: String,
-    pub config: GapFillConfig,
+    pub config: GameConfig,
     pub scoring_policy: ScoringPolicy,
     pub timing_policy: TimingPolicy,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GapFillConfig {
-    pub steps_count: usize,
-    pub distractors_per_step: usize,
-    pub allow_skip: bool,
+impl GameDefinition {
+    /// Returns gap-fill config when this definition is a gap_fill game.
+    pub fn gap_fill_config(&self) -> Result<&GapFillPassageConfig, crate::errors::DomainError> {
+        match &self.config {
+            GameConfig::GapFill(c) => Ok(c),
+        }
+    }
 }
 
-impl Default for GapFillConfig {
+/// Kind-specific rules JSON from `game_definitions.config` (tagged for future game types).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GameConfig {
+    #[serde(rename = "gap_fill")]
+    GapFill(GapFillPassageConfig),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GapFillScoringMode {
+    /// Each correct gap awards `scoring_policy` points (typically FixedPerCorrect per slot).
+    PerGap,
+    /// One award for the step if all gaps are correct.
+    AllOrNothing,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GapFillPassageConfig {
+    pub max_passage_words: u32,
+    pub distractors_per_gap: usize,
+    pub allow_skip: bool,
+    pub scoring_mode: GapFillScoringMode,
+}
+
+impl Default for GapFillPassageConfig {
     fn default() -> Self {
         Self {
-            steps_count: 10,
-            distractors_per_step: 2,
+            max_passage_words: 600,
+            distractors_per_gap: 2,
             allow_skip: false,
+            scoring_mode: GapFillScoringMode::PerGap,
         }
     }
 }

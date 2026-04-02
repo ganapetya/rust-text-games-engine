@@ -1,0 +1,15 @@
+---
+description: Explain non-obvious method calls in shakti-game-engine Rust code.
+globs: "**/*.rs"
+alwaysApply: false
+---
+
+# Method-call intent comments (shakti-game-engine)
+
+In non-trivial functions (services, repositories, LLM wiring, session lifecycle), add a **short end-of-line comment** on meaningful calls explaining **what the callee does** or **why** it runs there—not a repeat of the function name.
+
+- Prefer comments on **I/O** (`repository`, `llm_preparer`, `events.append`) and **domain transitions** (`session.start`, `record_evaluation`, `recompute_total_points`).
+- Skip comments on obvious pure helpers (`unwrap`, trivial getters).
+- Keep comments one line; no essays.
+
+This complements structured logging (`user_id`, `trace_id`): comments clarify **control flow**, logs clarify **correlation**.

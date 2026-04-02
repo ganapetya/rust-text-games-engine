@@ -4,5 +4,6 @@ pub mod pg;
 pub use llm::{build_llm_preparer, LlmMode, OpenAiGapFillPreparer};
 pub use pg::{
     clock::SystemClock, content::DbContentProvider, definitions::PgGameDefinitionRepository,
-    events::PgSessionEventRepository, sessions::PgGameSessionRepository,
+    events::PgSessionEventRepository, hard_words::PgHardWordsRepository,
+    sessions::PgGameSessionRepository,
 };

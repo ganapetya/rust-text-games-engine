@@ -1,10 +1,4 @@
-use serde::Deserialize;
-use shakti_game_domain::LearningItem;
-
-#[derive(Debug, Deserialize)]
-pub struct GapFillLlmJsonEnvelope {
-    pub learning_items: Vec<LearningItem>,
-}
+use shakti_game_domain::PassageGapLlmOutput;
 
 /// Removes optional ```json ... ``` fences from model output.
 pub fn strip_code_fences(s: &str) -> String {
@@ -20,33 +14,29 @@ pub fn strip_code_fences(s: &str) -> String {
     t.to_string()
 }
 
-pub fn parse_gap_fill_response(raw: &str) -> Result<Vec<LearningItem>, String> {
+/// Parses and returns [`PassageGapLlmOutput`] (caller runs [`PassageGapLlmOutput::validate`]).
+pub fn parse_passage_gap_response(raw: &str) -> Result<PassageGapLlmOutput, String> {
     let cleaned = strip_code_fences(raw);
-    let env: GapFillLlmJsonEnvelope =
-        serde_json::from_str(&cleaned).map_err(|e| format!("invalid LLM JSON: {e}"))?;
-    Ok(env.learning_items)
+    serde_json::from_str::<PassageGapLlmOutput>(&cleaned)
+        .map_err(|e| format!("invalid LLM JSON: {e}"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
+    use shakti_game_domain::PASSAGE_LLM_SCHEMA_VERSION;
 
     #[test]
     fn strip_fences() {
-        let s = "```json\n{\"learning_items\":[]}\n```";
-        assert_eq!(strip_code_fences(s), r#"{"learning_items":[]}"#);
+        let s = "```json\n{\"schema_version\":1}\n```";
+        assert!(strip_code_fences(s).contains("schema_version"));
     }
 
     #[test]
-    fn parse_envelope() {
-        let id = Uuid::new_v4();
-        let uid = Uuid::new_v4();
-        let raw = format!(
-            r#"{{"learning_items":[{{"id":"{id}","user_id":"{uid}","source_text":"a","context_text":null,"hard_fragment":"x","lemma":null,"language":"no","metadata":{{}}}}]}}"#
-        );
-        let items = parse_gap_fill_response(&raw).unwrap();
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].hard_fragment, "x");
+    fn parse_passage() {
+        let raw = r#"{"schema_version":1,"full_text":"ab","hard_words":[{"id":0,"start_char":0,"end_char":1,"surface":"a"}],"fake_words":["z"]}"#;
+        let p = parse_passage_gap_response(raw).unwrap();
+        assert_eq!(p.schema_version, PASSAGE_LLM_SCHEMA_VERSION);
+        p.validate().unwrap();
     }
 }
