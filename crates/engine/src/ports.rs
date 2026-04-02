@@ -1,5 +1,7 @@
 use async_trait::async_trait;
-use shakti_game_domain::{GameDefinition, GameSession, GameSessionId, LearningItem, UserId};
+use shakti_game_domain::{
+    GameDefinition, GameSession, GameSessionId, GapFillConfig, LearningItem, UserId,
+};
 use time::OffsetDateTime;
 
 use crate::errors::AppError;
@@ -47,5 +49,17 @@ pub trait ContentProvider: Send + Sync {
         &self,
         user_id: UserId,
         request: ContentRequest,
+    ) -> Result<Vec<LearningItem>, AppError>;
+}
+
+/// Async preparation step: prompt + items → validated [`LearningItem`] list for [`GapFillEngine`].
+#[async_trait]
+pub trait LlmContentPreparer: Send + Sync {
+    async fn prepare_gap_fill_learning_items(
+        &self,
+        user_id: UserId,
+        trace_id: Option<&str>,
+        items: &[LearningItem],
+        config: &GapFillConfig,
     ) -> Result<Vec<LearningItem>, AppError>;
 }

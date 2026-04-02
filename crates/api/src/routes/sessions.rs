@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Extension, Path, Query, State},
     routing::{get, post},
     Json, Router,
 };
@@ -16,6 +16,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::error::ApiError;
+use crate::middleware::RequestTrace;
 use crate::state::AppState;
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -79,11 +80,13 @@ pub struct CreateSessionResp {
 }
 
 async fn create_session(
+    Extension(trace): Extension<RequestTrace>,
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateSessionReq>,
 ) -> Result<Json<CreateSessionResp>, ApiError> {
     let cmd = CreateGameSessionCommand {
         user_id: UserId(body.user_id),
+        trace_id: Some(trace.trace_id.clone()),
         game_kind: body.game_kind,
         definition_id: body.definition_id.map(shakti_game_domain::GameDefinitionId),
         content_request: ContentRequest {

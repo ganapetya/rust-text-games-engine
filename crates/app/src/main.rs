@@ -1,8 +1,7 @@
+use shakti_game_engine::config;
 use shakti_game_engine::support;
 use std::net::SocketAddr;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-
-mod config;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -17,7 +16,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = support::connect_pool(&config.database_url).await?;
     support::run_migrations(&pool).await?;
 
-    let state = support::build_app_state(pool);
+    let llm_preparer = support::llm_preparer_from_config(&config)?;
+    let state = support::build_app_state(pool, llm_preparer);
     let app = support::build_app_router(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], config.app_port));
     tracing::info!(%addr, "listening");

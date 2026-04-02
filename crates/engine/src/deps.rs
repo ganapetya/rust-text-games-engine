@@ -1,5 +1,6 @@
 use crate::ports::{
-    Clock, ContentProvider, GameDefinitionRepository, GameSessionRepository, SessionEventRepository,
+    Clock, ContentProvider, GameDefinitionRepository, GameSessionRepository, LlmContentPreparer,
+    SessionEventRepository,
 };
 use shakti_game_domain::GameEngineRegistry;
 use std::sync::Arc;
@@ -11,4 +12,5 @@ pub struct EngineDeps {
     pub events: Arc<dyn SessionEventRepository>,
     pub clock: Arc<dyn Clock>,
     pub engines: Arc<GameEngineRegistry>,
+    pub llm_preparer: Arc<dyn LlmContentPreparer>,
 }

@@ -20,4 +20,7 @@ pub enum AppError {
 
     #[error("bad request: {0}")]
     BadRequest(String),
+
+    #[error("llm preparation failed: {0}")]
+    LlmPreparation(String),
 }

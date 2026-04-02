@@ -15,6 +15,8 @@ pub struct SessionOptions {
 
 pub struct CreateGameSessionCommand {
     pub user_id: UserId,
+    /// Correlates with `x-trace-id` when the session is created over HTTP.
+    pub trace_id: Option<String>,
     pub game_kind: GameKind,
     pub definition_id: Option<shakti_game_domain::GameDefinitionId>,
     pub content_request: ContentRequest,
@@ -54,6 +56,34 @@ pub async fn create_game_session(
         )));
     }
 
+    let items = if cmd.options.llm_preparation_enabled {
+        tracing::info!(
+            user_id = %cmd.user_id.0,
+            ?cmd.trace_id,
+            llm_preparation = true,
+            "running LLM preparation before gap_fill prepare_content"
+        );
+        let out = deps
+            .llm_preparer
+            .prepare_gap_fill_learning_items(
+                cmd.user_id,
+                cmd.trace_id.as_deref(),
+                &items,
+                &definition.config,
+            )
+            .await?;
+        if out.len() < need {
+            return Err(AppError::BadRequest(format!(
+                "LLM returned too few learning items: need {}, have {}",
+                need,
+                out.len()
+            )));
+        }
+        out
+    } else {
+        items
+    };
+
     let prepared = engine.prepare_content(&items, &definition.config)?;
     let steps = engine.generate_steps(&prepared, &definition.config)?;
     if steps.is_empty() {
@@ -76,6 +106,7 @@ pub async fn create_game_session(
             serde_json::json!({
                 "state": GameSessionState::Prepared,
                 "steps_count": session.steps.len(),
+                "llm_preparation_enabled": cmd.options.llm_preparation_enabled,
             }),
         )
         .await?;

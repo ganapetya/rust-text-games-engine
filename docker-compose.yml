@@ -23,6 +23,9 @@ services:
       DATABASE_URL: postgresql://game:game@shakti-game-db:5432/shakti_game
       RUST_LOG: ${RUST_LOG:-info}
       APP_PORT: "8010"
+      GAME_ENGINE_LLM_MODE: ${GAME_ENGINE_LLM_MODE:-mock}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      # OPENAI_API_KEY: set when GAME_ENGINE_LLM_MODE=openai
     ports:
       - "127.0.0.1:8010:8010"
     depends_on:

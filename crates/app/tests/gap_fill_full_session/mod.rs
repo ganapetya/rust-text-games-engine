@@ -12,6 +12,7 @@ use axum::http::StatusCode;
 use axum::Router;
 use serde_json::json;
 use shakti_game_domain::GameResult;
+use shakti_game_infrastructure::{build_llm_preparer, LlmMode};
 use shakti_game_engine::support::{
     build_app_router, build_app_state, connect_pool, run_migrations,
 };
@@ -39,7 +40,8 @@ async fn gap_fill_full_session_lifecycle() {
     let pool = connect_pool(&url).await.expect("connect pool");
     run_migrations(&pool).await.expect("migrations");
 
-    let app: Router = build_app_router(build_app_state(pool));
+    let llm = build_llm_preparer(LlmMode::Mock, None, "gpt-4o-mini".into()).expect("llm preparer");
+    let app: Router = build_app_router(build_app_state(pool, llm));
     let user = Uuid::parse_str(USER_ID).unwrap();
 
     let (st, body) = json_roundtrip(

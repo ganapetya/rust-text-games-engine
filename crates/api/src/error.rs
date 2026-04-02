@@ -25,6 +25,7 @@ impl ApiError {
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, e.to_string()),
             AppError::Domain(de) => (StatusCode::BAD_REQUEST, de.to_string()),
             AppError::Repository(_) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+            AppError::LlmPreparation(_) => (StatusCode::BAD_GATEWAY, e.to_string()),
         };
         ApiError { status, message }
     }

@@ -3,9 +3,9 @@
 
 use shakti_game_api::{build_router, AppState};
 use shakti_game_domain::{GameEngineRegistry, GapFillEngine};
-use shakti_game_engine_core::EngineDeps;
+use shakti_game_engine_core::{EngineDeps, LlmContentPreparer};
 use shakti_game_infrastructure::{
-    DbContentProvider, PgGameDefinitionRepository, PgGameSessionRepository,
+    build_llm_preparer, DbContentProvider, PgGameDefinitionRepository, PgGameSessionRepository,
     PgSessionEventRepository, SystemClock,
 };
 use sqlx::postgres::PgPoolOptions;
@@ -22,7 +22,10 @@ pub async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::migrate::Mi
     sqlx::migrate!("../../migrations").run(pool).await
 }
 
-pub fn build_engine_deps(pool: sqlx::PgPool) -> Arc<EngineDeps> {
+pub fn build_engine_deps(
+    pool: sqlx::PgPool,
+    llm_preparer: Arc<dyn LlmContentPreparer>,
+) -> Arc<EngineDeps> {
     let mut engines = GameEngineRegistry::new();
     engines.register(Arc::new(GapFillEngine::new()));
     let engines = Arc::new(engines);
@@ -34,12 +37,24 @@ pub fn build_engine_deps(pool: sqlx::PgPool) -> Arc<EngineDeps> {
         events: Arc::new(PgSessionEventRepository::new(pool.clone())),
         clock: Arc::new(SystemClock),
         engines,
+        llm_preparer,
     })
 }
 
-pub fn build_app_state(pool: sqlx::PgPool) -> AppState {
-    let deps = build_engine_deps(pool.clone());
+pub fn build_app_state(pool: sqlx::PgPool, llm_preparer: Arc<dyn LlmContentPreparer>) -> AppState {
+    let deps = build_engine_deps(pool.clone(), llm_preparer);
     AppState { deps, pool }
+}
+
+/// Wires [`build_llm_preparer`] from process environment (see [`crate::config::Config`]).
+pub fn llm_preparer_from_config(
+    config: &crate::config::Config,
+) -> Result<Arc<dyn LlmContentPreparer>, String> {
+    build_llm_preparer(
+        config.llm_mode,
+        config.openai_api_key.clone(),
+        config.openai_model.clone(),
+    )
 }
 
 pub fn build_app_router(state: AppState) -> axum::Router {
