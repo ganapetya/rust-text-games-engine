@@ -25,6 +25,14 @@ pub struct Config {
     pub openai_api_key: Option<String>,
     pub openai_model: String,
     pub openai_key_source: OpenAiKeySource,
+    /// When true, session API includes per-step correct gap words for local/dev testing (do not enable in production).
+    pub dev_expose_gap_solution: bool,
+}
+
+fn env_truthy(var: &str) -> bool {
+    std::env::var(var)
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
 }
 
 fn trim_key(s: &str) -> Option<String> {
@@ -86,6 +94,7 @@ impl Config {
         };
 
         let openai_model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-5.2".into());
+        let dev_expose_gap_solution = env_truthy("GAME_ENGINE_DEV_EXPOSE_GAP_SOLUTION");
 
         Ok(Config {
             database_url,
@@ -94,6 +103,7 @@ impl Config {
             openai_api_key,
             openai_model,
             openai_key_source,
+            dev_expose_gap_solution,
         })
     }
 }

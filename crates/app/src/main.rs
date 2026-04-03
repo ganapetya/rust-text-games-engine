@@ -17,6 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         llm_mode = ?config.llm_mode,
         openai_model = %config.openai_model,
         openai_key_source = config.openai_key_source.as_str(),
+        dev_expose_gap_solution = config.dev_expose_gap_solution,
         "game engine config loaded"
     );
 
@@ -24,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     support::run_migrations(&pool).await?;
 
     let llm_preparer = support::llm_preparer_from_config(&config)?;
-    let state = support::build_app_state(pool, llm_preparer);
+    let state = support::build_app_state(pool, llm_preparer, config.dev_expose_gap_solution);
     let app = support::build_app_router(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], config.app_port));
     tracing::info!(%addr, "listening");

@@ -134,7 +134,10 @@ async fn start_session(
     let session = start_game_session(&state.deps, sid, UserId(body.user_id))
         .await
         .map_err(ApiError::from_app_err)?;
-    Ok(Json(to_public_view(&session)))
+    Ok(Json(to_public_view(
+        &session,
+        state.dev_expose_gap_solution,
+    )))
 }
 
 #[derive(Deserialize)]
@@ -152,7 +155,10 @@ async fn get_session(
     let session = get_game_session(&state.deps, GameSessionId(session_id), UserId(q.user_id))
         .await
         .map_err(ApiError::from_app_err)?;
-    Ok(Json(to_public_view(&session)))
+    Ok(Json(to_public_view(
+        &session,
+        state.dev_expose_gap_solution,
+    )))
 }
 
 #[derive(Deserialize)]
@@ -208,7 +214,10 @@ async fn advance(
     let session = advance_session(&state.deps, GameSessionId(session_id), UserId(body.user_id))
         .await
         .map_err(ApiError::from_app_err)?;
-    Ok(Json(to_public_view(&session)))
+    Ok(Json(to_public_view(
+        &session,
+        state.dev_expose_gap_solution,
+    )))
 }
 
 #[derive(Deserialize)]
@@ -249,6 +258,9 @@ pub struct StepPublic {
     pub user_facing_step_prompt: UserFacingStepPrompt,
     pub user_answer: Option<UserAnswer>,
     pub evaluation: Option<shakti_game_domain::StepEvaluation>,
+    /// Correct answer per gap (ordinal 0 … n−1) when `GAME_ENGINE_DEV_EXPOSE_GAP_SOLUTION` is set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dev_gap_solution: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -269,8 +281,10 @@ impl From<&shakti_game_domain::Score> for ScoreDto {
     }
 }
 
-fn to_public_view(session: &GameSession) -> SessionPublicView {
-    let current_step = session.current_step().map(|s| step_public(s));
+fn to_public_view(session: &GameSession, dev_expose_gap_solution: bool) -> SessionPublicView {
+    let current_step = session
+        .current_step()
+        .map(|s| step_public(s, dev_expose_gap_solution));
     SessionPublicView {
         session_id: session.id.0,
         user_id: session.user_id.0,
@@ -282,7 +296,17 @@ fn to_public_view(session: &GameSession) -> SessionPublicView {
     }
 }
 
-fn step_public(step: &GameStep) -> StepPublic {
+fn dev_gap_solution(step: &GameStep, expose: bool) -> Option<Vec<String>> {
+    if !expose {
+        return None;
+    }
+    match &step.expected_answer {
+        shakti_game_domain::ExpectedAnswer::GapFillSlots { values } => Some(values.clone()),
+        _ => None,
+    }
+}
+
+fn step_public(step: &GameStep, dev_expose_gap_solution: bool) -> StepPublic {
     StepPublic {
         id: step.id.0,
         ordinal: step.ordinal,
@@ -290,5 +314,6 @@ fn step_public(step: &GameStep) -> StepPublic {
         user_facing_step_prompt: step.user_facing_step_prompt.clone(),
         user_answer: step.user_answer.clone(),
         evaluation: step.evaluation.clone(),
+        dev_gap_solution: dev_gap_solution(step, dev_expose_gap_solution),
     }
 }

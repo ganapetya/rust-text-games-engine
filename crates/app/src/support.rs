@@ -42,9 +42,17 @@ pub fn build_engine_deps(
     })
 }
 
-pub fn build_app_state(pool: sqlx::PgPool, llm_preparer: Arc<dyn LlmContentPreparer>) -> AppState {
+pub fn build_app_state(
+    pool: sqlx::PgPool,
+    llm_preparer: Arc<dyn LlmContentPreparer>,
+    dev_expose_gap_solution: bool,
+) -> AppState {
     let deps = build_engine_deps(pool.clone(), llm_preparer);
-    AppState { deps, pool }
+    AppState {
+        deps,
+        pool,
+        dev_expose_gap_solution,
+    }
 }
 
 /// Wires [`build_llm_preparer`] from process environment (see [`crate::config::Config`]).

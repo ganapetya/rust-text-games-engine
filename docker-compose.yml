@@ -24,6 +24,8 @@ services:
       RUST_LOG: ${RUST_LOG:-info}
       APP_PORT: "8010"
       GAME_ENGINE_LLM_MODE: ${GAME_ENGINE_LLM_MODE:-mock}
+      # Gap solution key for dev play UI; set false in any shared/prod deployment.
+      GAME_ENGINE_DEV_EXPOSE_GAP_SOLUTION: ${GAME_ENGINE_DEV_EXPOSE_GAP_SOLUTION:-true}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.2}
       # OPENAI_API_KEY: optional; otherwise mount openai.key.secret (see README)
     ports:

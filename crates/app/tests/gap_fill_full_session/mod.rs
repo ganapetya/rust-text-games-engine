@@ -35,7 +35,7 @@ async fn gap_fill_full_session_lifecycle() {
     run_migrations(&pool).await.expect("migrations");
 
     let llm = build_llm_preparer(LlmMode::Mock, None, "gpt-4o-mini".into()).expect("llm preparer");
-    let app: Router = build_app_router(build_app_state(pool, llm));
+    let app: Router = build_app_router(build_app_state(pool, llm, false));
     let user = Uuid::parse_str(USER_ID).unwrap();
 
     let (st, body) = json_roundtrip(

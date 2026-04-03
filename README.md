@@ -43,6 +43,10 @@ The app logs structured **`openai_key_source`** as `none`, `env`, or `file` at s
 
 `contentRequest` may include **`llmSourceTexts`** (non-empty strings → skip DB learning rows; requires **`language`**) and **`llmHardWords`** (non-empty list → skip DB vocabulary for the prompt). See the **shakti-game-play-ui** client.
 
+### Developer gap solution (play UI)
+
+When **`GAME_ENGINE_DEV_EXPOSE_GAP_SOLUTION`** is `1`, `true`, or `yes`, session/step JSON includes **`devGapSolution`** (array of strings, gap index order) on gap-fill steps so **shakti-game-play-ui** can show a developer hint panel. **Keep this off in production** (`false` or unset); `docker-compose.yml` defaults it to `true` for local testing only.
+
 ### Troubleshooting: `VersionMismatch(20250401000001)` (or similar)
 
 SQLx stores a **checksum** per applied migration in `_sqlx_migrations`. This error means the migration **file on disk** (baked into the binary) no longer matches the checksum recorded when that version first ran—usually because an old `migrations/*.sql` was **edited after it was already applied**, while the **Postgres Docker volume** still holds the old checksum.

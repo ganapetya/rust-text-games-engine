@@ -6,4 +6,6 @@ use std::sync::Arc;
 pub struct AppState {
     pub deps: Arc<EngineDeps>,
     pub pool: PgPool,
+    /// When true, `StepPublic` may include `dev_gap_solution` (correct words per gap ordinal).
+    pub dev_expose_gap_solution: bool,
 }
