@@ -15,6 +15,14 @@ impl PgGameSessionRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
+
+    fn advisory_keys_session(session_id: Uuid) -> (i32, i32) {
+        let b = session_id.as_bytes();
+        (
+            i32::from_be_bytes([b[0], b[1], b[2], b[3]]),
+            i32::from_be_bytes([b[4], b[5], b[6], b[7]]),
+        )
+    }
 }
 
 #[async_trait]
@@ -352,5 +360,114 @@ impl GameSessionRepository for PgGameSessionRepository {
             .await
             .map_err(|e| AppError::Repository(e.to_string()))?;
         Ok(())
+    }
+
+    async fn persist_materialized_start(&self, session: &GameSession) -> Result<bool, AppError> {
+        let score_json = serde_json::to_value(&session.score)
+            .map_err(|e| AppError::Repository(e.to_string()))?;
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| AppError::Repository(e.to_string()))?;
+
+        let (k1, k2) = Self::advisory_keys_session(session.id.0);
+        sqlx::query("SELECT pg_advisory_xact_lock($1, $2)")
+            .bind(k1)
+            .bind(k2)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| AppError::Repository(e.to_string()))?;
+
+        let state: String = sqlx::query_scalar(
+            r#"SELECT state FROM game_sessions WHERE id = $1 FOR UPDATE"#,
+        )
+        .bind(session.id.0)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| AppError::Repository(e.to_string()))?;
+
+        if state != "draft" {
+            tx.commit()
+                .await
+                .map_err(|e| AppError::Repository(e.to_string()))?;
+            return Ok(false);
+        }
+
+        sqlx::query(r#"DELETE FROM game_steps WHERE session_id = $1"#)
+            .bind(session.id.0)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| AppError::Repository(e.to_string()))?;
+
+        for step in &session.steps {
+            let user_facing_step_prompt = serde_json::to_value(&step.user_facing_step_prompt)
+                .map_err(|e| AppError::Repository(e.to_string()))?;
+            let expected = serde_json::to_value(&step.expected_answer)
+                .map_err(|e| AppError::Repository(e.to_string()))?;
+            let ua = step
+                .user_answer
+                .as_ref()
+                .map(|a| serde_json::to_value(a))
+                .transpose()
+                .map_err(|e| AppError::Repository(e.to_string()))?;
+            let ev = step
+                .evaluation
+                .as_ref()
+                .map(|a| serde_json::to_value(a))
+                .transpose()
+                .map_err(|e| AppError::Repository(e.to_string()))?;
+
+            sqlx::query(
+                r#"INSERT INTO game_steps (
+                    id, session_id, ordinal, state, user_facing_step_prompt, expected_answer,
+                    user_answer, evaluation, deadline_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"#,
+            )
+            .bind(step.id.0)
+            .bind(session.id.0)
+            .bind(step.ordinal as i32)
+            .bind(step_state_to_db(step.state))
+            .bind(user_facing_step_prompt)
+            .bind(expected)
+            .bind(ua)
+            .bind(ev)
+            .bind(step.deadline_at)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| AppError::Repository(e.to_string()))?;
+        }
+
+        sqlx::query(
+            r#"UPDATE game_sessions SET
+                state = $2,
+                current_step_index = $3,
+                score = $4,
+                started_at = $5,
+                completed_at = $6,
+                expires_at = $7,
+                base_context = $8,
+                deferred_payload = $9,
+                updated_at = now()
+               WHERE id = $1"#,
+        )
+        .bind(session.id.0)
+        .bind(session_state_to_db(session.state))
+        .bind(session.current_step_index as i32)
+        .bind(score_json)
+        .bind(session.started_at)
+        .bind(session.completed_at)
+        .bind(session.expires_at)
+        .bind(&session.base_context)
+        .bind(&session.deferred_payload)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| AppError::Repository(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| AppError::Repository(e.to_string()))?;
+        Ok(true)
     }
 }

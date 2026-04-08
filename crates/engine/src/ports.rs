@@ -35,6 +35,9 @@ pub trait GameSessionRepository: Send + Sync {
     ) -> Result<(), AppError>;
     /// Removes all steps for a session (replay / recovery from partial start).
     async fn delete_steps(&self, session_id: GameSessionId) -> Result<(), AppError>;
+    /// Inserts steps + updates session in one transaction, serialized per session id.
+    /// Returns `false` if the row was no longer `draft` (another request won the race); caller should `get()`.
+    async fn persist_materialized_start(&self, session: &GameSession) -> Result<bool, AppError>;
 }
 
 #[async_trait]

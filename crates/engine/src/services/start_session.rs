@@ -25,12 +25,6 @@ pub async fn start_game_session(
     if session.user_id != user_id {
         return Err(AppError::Forbidden);
     }
-    // Partial start: steps were inserted but the session row was not updated — retry would violate
-    // game_steps_session_id_ordinal_key.
-    if session.state == GameSessionState::Draft && !session.steps.is_empty() {
-        deps.sessions.delete_steps(session_id).await?;
-        session.steps.clear();
-    }
     if session.state != GameSessionState::Draft {
         return Err(AppError::Conflict(format!(
             "session must be draft, got {:?}",
@@ -136,10 +130,6 @@ pub async fn start_game_session(
         }
     }
 
-    deps.sessions
-        .insert_steps(session_id, &steps)
-        .await?; // persist new `game_steps` rows for this session id
-
     session.steps = steps;
     session.base_context = base_context;
     session.deferred_payload = None;
@@ -148,7 +138,15 @@ pub async fn start_game_session(
     let now = deps.clock.now();
     session.start(now)?; // `Draft` + steps → `InProgress`, first step active + deadline
 
-    deps.sessions.update(&session).await?; // UPDATE session row + step states
+    // One transaction + advisory lock so concurrent POST /start cannot double-insert steps.
+    let persisted = deps.sessions.persist_materialized_start(&session).await?;
+    if !persisted {
+        let s = deps.sessions.get(session_id).await?;
+        if s.user_id != user_id {
+            return Err(AppError::Forbidden);
+        }
+        return Ok(s);
+    }
 
     deps.events
         .append(
