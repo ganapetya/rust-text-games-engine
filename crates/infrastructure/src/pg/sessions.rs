@@ -344,4 +344,13 @@ impl GameSessionRepository for PgGameSessionRepository {
             .map_err(|e| AppError::Repository(e.to_string()))?;
         Ok(())
     }
+
+    async fn delete_steps(&self, session_id: GameSessionId) -> Result<(), AppError> {
+        sqlx::query(r#"DELETE FROM game_steps WHERE session_id = $1"#)
+            .bind(session_id.0)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| AppError::Repository(e.to_string()))?;
+        Ok(())
+    }
 }

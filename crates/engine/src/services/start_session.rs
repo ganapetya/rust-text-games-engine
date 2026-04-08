@@ -25,6 +25,12 @@ pub async fn start_game_session(
     if session.user_id != user_id {
         return Err(AppError::Forbidden);
     }
+    // Partial start: steps were inserted but the session row was not updated — retry would violate
+    // game_steps_session_id_ordinal_key.
+    if session.state == GameSessionState::Draft && !session.steps.is_empty() {
+        deps.sessions.delete_steps(session_id).await?;
+        session.steps.clear();
+    }
     if session.state != GameSessionState::Draft {
         return Err(AppError::Conflict(format!(
             "session must be draft, got {:?}",

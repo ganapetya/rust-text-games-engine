@@ -10,8 +10,9 @@ use shakti_game_domain::{
     UserFacingStepPrompt, UserId,
 };
 use shakti_game_engine_core::{
-    advance_session, create_game_session, get_game_result, get_game_session, start_game_session,
-    submit_answer, ContentRequest, CreateGameSessionCommand, SessionOptions, SubmitAnswerCommand,
+    advance_session, create_game_session, get_game_result, get_game_session, play_again_gap_fill,
+    start_game_session, submit_answer, ContentRequest, CreateGameSessionCommand, SessionOptions,
+    SubmitAnswerCommand,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -25,6 +26,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/game-sessions/bootstrap", post(bootstrap_session))
         .route("/game-sessions", post(create_session))
         .route("/game-sessions/{session_id}/start", post(start_session))
+        .route("/game-sessions/{session_id}/play-again", post(play_again_session))
         .route("/game-sessions/{session_id}", get(get_session))
         .route(
             "/game-sessions/{session_id}/steps/{step_id}/answer",
@@ -278,6 +280,27 @@ async fn start_session(
         "start_game_session"
     );
     let session = start_game_session(&state.deps, sid, UserId(body.user_id))
+        .await
+        .map_err(ApiError::from_app_err)?;
+    Ok(Json(to_public_view(
+        &session,
+        state.dev_expose_gap_solution,
+    )))
+}
+
+async fn play_again_session(
+    Extension(trace): Extension<RequestTrace>,
+    State(state): State<Arc<AppState>>,
+    Path(session_id): Path<Uuid>,
+    Json(body): Json<UserActionBody>,
+) -> Result<Json<SessionPublicView>, ApiError> {
+    let sid = GameSessionId(session_id);
+    tracing::info!(
+        user_id = %body.user_id,
+        trace_id = %trace.trace_id,
+        "play_again_gap_fill"
+    );
+    let session = play_again_gap_fill(&state.deps, sid, UserId(body.user_id))
         .await
         .map_err(ApiError::from_app_err)?;
     Ok(Json(to_public_view(

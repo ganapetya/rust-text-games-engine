@@ -33,6 +33,8 @@ pub trait GameSessionRepository: Send + Sync {
         session_id: GameSessionId,
         steps: &[GameStep],
     ) -> Result<(), AppError>;
+    /// Removes all steps for a session (replay / recovery from partial start).
+    async fn delete_steps(&self, session_id: GameSessionId) -> Result<(), AppError>;
 }
 
 #[async_trait]
