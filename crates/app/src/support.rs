@@ -25,6 +25,7 @@ pub async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::migrate::Mi
 pub fn build_engine_deps(
     pool: sqlx::PgPool,
     llm_preparer: Arc<dyn LlmContentPreparer>,
+    dev_expose_gap_solution: bool,
 ) -> Arc<EngineDeps> {
     let mut engines = GameEngineRegistry::new();
     engines.register(Arc::new(GapFillEngine::new()));
@@ -39,6 +40,7 @@ pub fn build_engine_deps(
         clock: Arc::new(SystemClock),
         engines,
         llm_preparer,
+        dev_expose_gap_solution,
     })
 }
 
@@ -46,12 +48,14 @@ pub fn build_app_state(
     pool: sqlx::PgPool,
     llm_preparer: Arc<dyn LlmContentPreparer>,
     dev_expose_gap_solution: bool,
+    service_api_key: Option<String>,
 ) -> AppState {
-    let deps = build_engine_deps(pool.clone(), llm_preparer);
+    let deps = build_engine_deps(pool.clone(), llm_preparer, dev_expose_gap_solution);
     AppState {
         deps,
         pool,
         dev_expose_gap_solution,
+        service_api_key: service_api_key.map(|s| s.into_boxed_str().into()),
     }
 }
 
@@ -63,6 +67,9 @@ pub fn llm_preparer_from_config(
         config.llm_mode,
         config.openai_api_key.clone(),
         config.openai_model.clone(),
+        config.shakti_actors_internal_url.clone(),
+        config.shakti_actors_openai_key_name.clone(),
+        config.shakti_actors_openai_consumer_service.clone(),
     )
 }
 

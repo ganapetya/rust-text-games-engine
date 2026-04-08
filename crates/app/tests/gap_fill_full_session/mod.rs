@@ -34,8 +34,16 @@ async fn gap_fill_full_session_lifecycle() {
     let pool = connect_pool(&url).await.expect("connect pool");
     run_migrations(&pool).await.expect("migrations");
 
-    let llm = build_llm_preparer(LlmMode::Mock, None, "gpt-4o-mini".into()).expect("llm preparer");
-    let app: Router = build_app_router(build_app_state(pool, llm, false));
+    let llm = build_llm_preparer(
+        LlmMode::Mock,
+        None,
+        "gpt-4o-mini".into(),
+        None,
+        "openai_main".into(),
+        "shakti-game-engine".into(),
+    )
+    .expect("llm preparer");
+    let app: Router = build_app_router(build_app_state(pool, llm, false, None));
     let user = Uuid::parse_str(USER_ID).unwrap();
 
     let (st, body) = json_roundtrip(

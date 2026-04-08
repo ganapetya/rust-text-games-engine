@@ -1,0 +1,107 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug unit tests in library 'shakti_game_domain'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=shakti-game-domain"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'shakti_game_engine_core'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=shakti-game-engine-core"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'shakti_game_infrastructure'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=shakti-game-infrastructure"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'shakti_game_api'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=shakti-game-api"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'shakti_game_engine'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=shakti-game-engine"
+                ]
+            }
+        },
+        {
+            "name": "Debug executable 'shakti-game-engine'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=shakti-game-engine",
+                    "--package=shakti-game-engine"
+                ]
+            },
+            "args": [],
+            // Same defaults as env.example / README; start DB: docker compose up -d (port 5435)
+            "env": {
+                "DATABASE_URL": "postgresql://game:game@127.0.0.1:5435/shakti_game",
+                "APP_PORT": "8010",
+                "GAME_ENGINE_LLM_MODE": "mock",
+                "RUST_LOG": "info"
+            }
+        },
+        {
+            "name": "Debug unit tests in executable 'shakti-game-engine'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--bin=shakti-game-engine",
+                    "--package=shakti-game-engine"
+                ]
+            }
+        },
+        {
+            "name": "Debug integration test 'integration_test'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--test=integration_test",
+                    "--package=shakti-game-engine"
+                ]
+            }
+        }
+    ]
+}

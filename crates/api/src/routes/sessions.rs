@@ -1,5 +1,6 @@
 use axum::{
     extract::{Extension, Path, Query, State},
+    http::{HeaderMap, StatusCode, header::AUTHORIZATION},
     routing::{get, post},
     Json, Router,
 };
@@ -21,6 +22,7 @@ use crate::state::AppState;
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/game-sessions/bootstrap", post(bootstrap_session))
         .route("/game-sessions", post(create_session))
         .route("/game-sessions/{session_id}/start", post(start_session))
         .route("/game-sessions/{session_id}", get(get_session))
@@ -81,6 +83,149 @@ pub struct CreateSessionResp {
     pub steps_count: usize,
 }
 
+/// Server-to-server: creates a draft session from a JSON `contentPackage` (stored in DB for audit).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BootstrapSessionReq {
+    pub user_id: Uuid,
+    pub language: String,
+    pub game_kind: GameKind,
+    pub definition_id: Option<Uuid>,
+    pub content_package: serde_json::Value,
+    #[serde(default)]
+    pub options: SessionOptionsDto,
+    pub trace_id: Option<String>,
+}
+
+fn extract_bootstrap_service_token(headers: &HeaderMap) -> Option<String> {
+    if let Some(raw) = headers
+        .get("x-shakti-game-service-key")
+        .and_then(|v| v.to_str().ok())
+    {
+        let t = raw.trim();
+        if !t.is_empty() {
+            return Some(t.to_string());
+        }
+    }
+    if let Some(raw) = headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok()) {
+        let h = raw.trim();
+        const PREFIX: &str = "Bearer ";
+        if h.len() > PREFIX.len() && h[..PREFIX.len()].eq_ignore_ascii_case(PREFIX) {
+            let t = h[PREFIX.len()..].trim();
+            if !t.is_empty() {
+                return Some(t.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn constant_time_eq_str(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.bytes()
+        .zip(b.bytes())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
+}
+
+fn verify_bootstrap_service_key(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
+    let Some(expected) = state.service_api_key.as_ref() else {
+        return Err(ApiError {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            message: "game session bootstrap is not configured (set GAME_ENGINE_SERVICE_API_KEY)"
+                .into(),
+        });
+    };
+    let Some(got) = extract_bootstrap_service_token(headers) else {
+        return Err(ApiError {
+            status: StatusCode::UNAUTHORIZED,
+            message: "missing Authorization: Bearer or X-Shakti-Game-Service-Key".into(),
+        });
+    };
+    if !constant_time_eq_str(expected.as_ref(), &got) {
+        return Err(ApiError {
+            status: StatusCode::UNAUTHORIZED,
+            message: "invalid service key".into(),
+        });
+    }
+    Ok(())
+}
+
+async fn bootstrap_session(
+    Extension(trace): Extension<RequestTrace>,
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<BootstrapSessionReq>,
+) -> Result<Json<CreateSessionResp>, ApiError> {
+    verify_bootstrap_service_key(&state, &headers)?;
+
+    if !body.content_package.is_object() {
+        return Err(ApiError {
+            status: StatusCode::BAD_REQUEST,
+            message: "contentPackage must be a JSON object".into(),
+        });
+    }
+
+    let mut dto: ContentReqDto = serde_json::from_value(body.content_package.clone()).map_err(|e| {
+        ApiError {
+            status: StatusCode::BAD_REQUEST,
+            message: format!("contentPackage: {e}"),
+        }
+    })?;
+
+    let lang = body.language.trim();
+    if lang.is_empty() {
+        return Err(ApiError {
+            status: StatusCode::BAD_REQUEST,
+            message: "language must be non-empty".into(),
+        });
+    }
+    dto.language = Some(lang.to_string());
+
+    let trace_for_cmd = body
+        .trace_id
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .or_else(|| Some(trace.trace_id.clone()));
+
+    tracing::info!(
+        user_id = %body.user_id,
+        trace_id = %trace.trace_id,
+        "bootstrap_game_session"
+    );
+
+    let cmd = CreateGameSessionCommand {
+        user_id: UserId(body.user_id),
+        trace_id: trace_for_cmd,
+        game_kind: body.game_kind,
+        definition_id: body.definition_id.map(shakti_game_domain::GameDefinitionId),
+        content_request: ContentRequest {
+            source: dto.source,
+            limit: dto.limit,
+            language: dto.language,
+            llm_source_texts: dto.llm_source_texts,
+            llm_hard_words: dto.llm_hard_words,
+        },
+        options: SessionOptions {
+            step_time_limit_secs: body.options.step_time_limit_secs,
+        },
+        content_package_audit: Some(body.content_package),
+    };
+    let session = create_game_session(&state.deps, cmd)
+        .await
+        .map_err(ApiError::from_app_err)?;
+    Ok(Json(CreateSessionResp {
+        session_id: session.id.0,
+        state: session.state,
+        current_step_index: session.current_step_index,
+        steps_count: session.steps.len(),
+    }))
+}
+
 async fn create_session(
     Extension(trace): Extension<RequestTrace>,
     State(state): State<Arc<AppState>>,
@@ -101,6 +246,7 @@ async fn create_session(
         options: SessionOptions {
             step_time_limit_secs: body.options.step_time_limit_secs,
         },
+        content_package_audit: None,
     };
     let session = create_game_session(&state.deps, cmd)
         .await
@@ -247,6 +393,9 @@ pub struct SessionPublicView {
     pub steps_count: usize,
     pub score: ScoreDto,
     pub current_step: Option<StepPublic>,
+    /// When `GAME_ENGINE_DEV_EXPOSE_GAP_SOLUTION` is set: LLM request summary (sources, hard words, language).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dev_llm_inputs: Option<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -281,6 +430,16 @@ impl From<&shakti_game_domain::Score> for ScoreDto {
     }
 }
 
+fn dev_llm_inputs_from_base(
+    base: &serde_json::Value,
+    expose: bool,
+) -> Option<serde_json::Value> {
+    if !expose {
+        return None;
+    }
+    base.get("_dev_llm_inputs").cloned()
+}
+
 fn to_public_view(session: &GameSession, dev_expose_gap_solution: bool) -> SessionPublicView {
     let current_step = session
         .current_step()
@@ -293,6 +452,7 @@ fn to_public_view(session: &GameSession, dev_expose_gap_solution: bool) -> Sessi
         steps_count: session.steps.len(),
         score: ScoreDto::from(&session.score),
         current_step,
+        dev_llm_inputs: dev_llm_inputs_from_base(&session.base_context, dev_expose_gap_solution),
     }
 }
 

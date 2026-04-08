@@ -36,7 +36,7 @@ pub async fn start_game_session(
         .deferred_payload
         .clone()
         .ok_or_else(|| AppError::Conflict("missing deferred_payload".into()))?;
-    let deferred: DeferredPayload = serde_json::from_value(deferred_raw)
+    let deferred: DeferredPayload = serde_json::from_value(deferred_raw.clone())
         .map_err(|e| AppError::Repository(format!("deferred payload: {e}")))?;
 
     let lang = deferred
@@ -107,8 +107,28 @@ pub async fn start_game_session(
 
     let steps = engine.generate_steps(&prepared, &definition)?; // one multi-gap `GameStep`
 
-    let base_context =
+    let mut base_context =
         serde_json::to_value(&passage).map_err(|e| AppError::Repository(e.to_string()))?;
+
+    if deps.dev_expose_gap_solution {
+        if let Some(obj) = base_context.as_object_mut() {
+            let mut dev_llm = serde_json::json!({
+                "language": deferred.content_request.language,
+                "llmSourceTexts": deferred.content_request.llm_source_texts,
+                "llmHardWords": deferred.content_request.llm_hard_words,
+                "learningItemsCount": items.len(),
+            });
+            if let (Some(dev_obj), Some(ri)) = (
+                dev_llm.as_object_mut(),
+                deferred_raw
+                    .get("content_package")
+                    .and_then(|p| p.get("recapInputItems")),
+            ) {
+                dev_obj.insert("recapInputItems".into(), ri.clone());
+            }
+            obj.insert("_dev_llm_inputs".to_string(), dev_llm);
+        }
+    }
 
     deps.sessions
         .insert_steps(session_id, &steps)

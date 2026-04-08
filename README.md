@@ -37,7 +37,9 @@ docker compose up --build
 4. **`GAME_ENGINE_LLM_MODE`**: `mock` (default in compose), `openai` for live calls, or omit when running the binary locally so that if a key is present the engine picks OpenAI automatically.
 5. For Docker, `docker-compose.yml` bind-mounts `./openai.key.secret` → `/app/openai.key.secret`. Create that file in the repo root before `GAME_ENGINE_LLM_MODE=openai docker compose up --build`. If the file is missing, compose may fail to start the engine container; use mock mode or add a placeholder line for local-only dev.
 
-The app logs structured **`openai_key_source`** as `none`, `env`, or `file` at startup (never logs the key).
+The app logs structured **`openai_key_source`** as `none`, `env`, `file`, or **`actors`** at startup (never logs the key).
+
+**Shakti full stack (`shakti-deployment` Docker Compose):** set **`GAME_ENGINE_LLM_MODE=openai`** and **`SHAKTI_ACTORS_INTERNAL_URL=http://shakti-actors:8080`**. The engine fetches the key lazily on the first gap-fill **start** from **`GET /api/keys/get/openai_main/shakti-game-engine`** (same encrypted row as `install-api-keys.sh` → `openai_main`). Override names with **`SHAKTI_ACTORS_OPENAI_KEY_NAME`** / **`SHAKTI_ACTORS_OPENAI_CONSUMER_SERVICE`**. Env/file key still wins if set.
 
 ### Inline LLM inputs (play UI / API)
 
@@ -116,6 +118,31 @@ Result (after session finished):
 curl -s 'http://127.0.0.1:8010/api/v1/game-sessions/SESSION_ID/result?userId=11111111-1111-1111-1111-111111111111'
 ```
 
+### Bootstrap session (server-to-server)
+
+Set **`GAME_ENGINE_SERVICE_API_KEY`** in the environment. Then **`POST /api/v1/game-sessions/bootstrap`** accepts the same auth as internal callers:
+
+- Header **`Authorization: Bearer <key>`** or **`X-Shakti-Game-Service-Key: <key>`**
+- JSON body (camelCase): **`userId`** (UUID), **`language`**, **`gameKind`**, optional **`definitionId`**, **`contentPackage`** (object — same shape as `contentRequest` for gap-fill, e.g. `source`, `limit`, `llmSourceTexts`, `llmHardWords`), optional **`options`**, optional **`traceId`**
+
+The engine stores **`contentPackage`** inside session **`deferred_payload`** as **`content_package`** (audit) and maps it to `content_request` for **`start`**. If the key is unset, bootstrap returns **503**.
+
+```bash
+export KEY=your-long-random-secret
+curl -s -X POST http://127.0.0.1:8010/api/v1/game-sessions/bootstrap \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $KEY" \
+  -d '{
+    "userId": "11111111-1111-1111-1111-111111111111",
+    "language": "no",
+    "gameKind": "gap_fill",
+    "contentPackage": {
+      "source": "hard_words",
+      "limit": 5
+    }
+  }'
+```
+
 ## Project layout
 
 - `crates/domain` — pure model, gap-fill engine, unit tests
@@ -129,4 +156,4 @@ Design reference: [shakti_game_engine_design.md](./shakti_game_engine_design.md)
 
 ## Shakti monorepo compose (optional)
 
-When this repository sits next to `shakti-deployment`, you can enable the optional Compose profile `game-engine` so the service joins `shakti-network` and uses a dedicated `shakti_game` database on `shakti-db`. See `shakti-deployment/docker-compose.yml`.
+When this repository sits next to `shakti-deployment`, the `shakti-game-engine` service is part of the default stack (same `docker-compose.yml`), joins `shakti-network`, and uses database `shakti_game` on `shakti-db`.

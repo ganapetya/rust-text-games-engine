@@ -6,6 +6,8 @@ pub enum OpenAiKeySource {
     None,
     Env,
     File,
+    /// Decrypted via `GET /api/keys/get/{key}/{service}` on shakti-actors (Shakti `api_keys` table).
+    Actors,
 }
 
 impl OpenAiKeySource {
@@ -14,6 +16,7 @@ impl OpenAiKeySource {
             OpenAiKeySource::None => "none",
             OpenAiKeySource::Env => "env",
             OpenAiKeySource::File => "file",
+            OpenAiKeySource::Actors => "actors",
         }
     }
 }
@@ -25,8 +28,14 @@ pub struct Config {
     pub openai_api_key: Option<String>,
     pub openai_model: String,
     pub openai_key_source: OpenAiKeySource,
+    /// When set, OpenAI key is fetched from shakti-actors (lazy, on first LLM call).
+    pub shakti_actors_internal_url: Option<String>,
+    pub shakti_actors_openai_key_name: String,
+    pub shakti_actors_openai_consumer_service: String,
     /// When true, session API includes per-step correct gap words for local/dev testing (do not enable in production).
     pub dev_expose_gap_solution: bool,
+    /// Shared secret for server-to-server `POST /api/v1/game-sessions/bootstrap` only.
+    pub service_api_key: Option<String>,
 }
 
 fn env_truthy(var: &str) -> bool {
@@ -70,7 +79,25 @@ impl Config {
             .and_then(|s| s.parse().ok())
             .unwrap_or(8010);
 
-        let (openai_api_key, openai_key_source) = resolve_openai_key();
+        let (openai_api_key, mut openai_key_source) = resolve_openai_key();
+
+        let shakti_actors_internal_url = std::env::var("SHAKTI_ACTORS_INTERNAL_URL")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        let shakti_actors_openai_key_name = std::env::var("SHAKTI_ACTORS_OPENAI_KEY_NAME")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "openai_main".into());
+
+        let shakti_actors_openai_consumer_service =
+            std::env::var("SHAKTI_ACTORS_OPENAI_CONSUMER_SERVICE")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "shakti-game-engine".into());
 
         let llm_mode = match std::env::var("GAME_ENGINE_LLM_MODE")
             .ok()
@@ -79,6 +106,8 @@ impl Config {
         {
             None | Some("") => {
                 if openai_api_key.is_some() {
+                    LlmMode::OpenAi
+                } else if shakti_actors_internal_url.is_some() {
                     LlmMode::OpenAi
                 } else {
                     LlmMode::Mock
@@ -96,6 +125,17 @@ impl Config {
         let openai_model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-5.2".into());
         let dev_expose_gap_solution = env_truthy("GAME_ENGINE_DEV_EXPOSE_GAP_SOLUTION");
 
+        let service_api_key = std::env::var("GAME_ENGINE_SERVICE_API_KEY")
+            .ok()
+            .and_then(|s| trim_key(&s));
+
+        if llm_mode == LlmMode::OpenAi
+            && openai_api_key.is_none()
+            && shakti_actors_internal_url.is_some()
+        {
+            openai_key_source = OpenAiKeySource::Actors;
+        }
+
         Ok(Config {
             database_url,
             app_port,
@@ -103,7 +143,11 @@ impl Config {
             openai_api_key,
             openai_model,
             openai_key_source,
+            shakti_actors_internal_url,
+            shakti_actors_openai_key_name,
+            shakti_actors_openai_consumer_service,
             dev_expose_gap_solution,
+            service_api_key,
         })
     }
 }

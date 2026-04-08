@@ -21,6 +21,8 @@ pub struct CreateGameSessionCommand {
     pub definition_id: Option<shakti_game_domain::GameDefinitionId>,
     pub content_request: ContentRequest,
     pub options: SessionOptions,
+    /// Original `contentPackage` from bootstrap (audit); omitted for public create.
+    pub content_package_audit: Option<serde_json::Value>,
 }
 
 /// Persists `Draft` + deferred payload; no LLM or steps yet.
@@ -47,11 +49,16 @@ pub async fn create_game_session(
         definition.timing_policy.per_step_limit_secs = Some(secs); // per-request override; not persisted to definition row
     }
 
-    let deferred = serde_json::json!({
+    let mut deferred = serde_json::json!({
         "content_request": cmd.content_request,
         "session_options": cmd.options,
         "trace_id": cmd.trace_id,
     });
+    if let Some(pkg) = &cmd.content_package_audit {
+        if let Some(obj) = deferred.as_object_mut() {
+            obj.insert("content_package".to_string(), pkg.clone());
+        }
+    }
 
     let session = GameSession::new_draft(
         GameSessionId(Uuid::new_v4()),
