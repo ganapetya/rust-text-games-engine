@@ -21,8 +21,8 @@ pub use gap_fill::GapFillEngine;
 pub use ids::{GameDefinitionId, GameSessionId, GameStepId, LearningItemId, UserId};
 pub use passage::{PassageGapLlmOutput, PassageHardWordOccurrence, PASSAGE_LLM_SCHEMA_VERSION};
 pub use policies::{
-    GameConfig, GameDefinition, GameKind, GapFillPassageConfig, GapFillScoringMode, ScoringPolicy,
-    TimingPolicy,
+    GameConfig, GameDefinition, GameKind, GapFillLlmTemplate, GapFillPassageConfig,
+    GapFillScoringMode, ScoringPolicy, TimingPolicy,
 };
 pub use result::GameResult;
 pub use score::Score;

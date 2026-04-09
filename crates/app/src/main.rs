@@ -48,10 +48,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     support::run_migrations(&pool).await?;
 
-    let llm_preparer = support::llm_preparer_from_config(&config)?;
+    let (llm_preparer, llm_translator) = support::llm_stack_from_config(&config)?;
     let state = support::build_app_state(
         pool,
         llm_preparer,
+        llm_translator,
         config.dev_expose_gap_solution,
         config.service_api_key.clone(),
     );

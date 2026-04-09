@@ -1,5 +1,19 @@
 use serde_json::json;
-use shakti_game_domain::{GameConfig, GameDefinition, GapFillPassageConfig, LearningItem};
+use shakti_game_domain::{
+    GameConfig, GameDefinition, GapFillLlmTemplate, GapFillPassageConfig, LearningItem,
+};
+
+fn morphology_template_addon(target_language: &str) -> String {
+    format!(
+        r#"
+
+**Template: morphology / agreement focus ({target_language}):**
+- In `full_text`, every gap substring (`hard_words[].surface`) must be the **grammatically correct** form for its sentence (right case, gender/number agreement, etc.).
+- Use `fake_words` to include **deliberately wrong inflections** (wrong case, wrong gender agreement, common learner errors) so the learner must notice context and choose or supply the correct surface.
+- Do **not** put incorrect morphology in `full_text` for gap words; wrong forms belong in `fake_words` (and may repeat stems with wrong endings).
+- Keep the same JSON schema and all numeric limits from the base rules above."#
+    )
+}
 
 /// System prompt: single JSON object with passage + hard word character spans + fake words.
 /// `target_language` is the BCP-47 / locale code from the session (e.g. `no`); the model must write only in that language.
@@ -7,7 +21,7 @@ pub fn passage_gap_system_prompt(gap: &GapFillPassageConfig, target_language: &s
     let max_passage_words = gap.max_passage_words;
     let max_s = gap.max_llm_sentences;
     let max_g = gap.max_llm_gap_slots;
-    format!(
+    let mut base = format!(
         r#"You write coherent prose for a language-learning gap-fill game.
 
 Respond with ONLY valid JSON (no markdown fences, no commentary) matching exactly:
@@ -26,7 +40,11 @@ Rules:
 - hard_words: ids are distinct small integers per gap; spans must be correct even if ids are not in left-to-right order.
 - **Character indices:** start_char and end_char count **Unicode scalar values** (not UTF-8 bytes). Each `surface` must equal the slice `full_text[start_char..end_char]` under that counting (important for Norwegian å, ø, æ).
 - fake_words: plausible distractors for gaps; should not duplicate any hard word surface."#
-    )
+    );
+    if gap.llm_template == GapFillLlmTemplate::MorphologyDistractors {
+        base.push_str(&morphology_template_addon(target_language));
+    }
+    base
 }
 
 /// User payload: items, registered words, target language, definition hints.
@@ -45,12 +63,35 @@ pub fn passage_gap_user_message_json(
     let exceptions = format!(
         "When limits conflict with the full vocabulary list, respect the {max_s}-sentence and {max_g}-gap caps first; only when a listed word truly cannot fit within those caps, omit that gap or use a rare substitute per system rules."
     );
+    let mut must_not = vec![
+        serde_json::Value::String("Use learning_items source_text or context_text as the passage body or as consecutive stitched paragraphs.".into()),
+        serde_json::Value::String("Change language away from target_language.".into()),
+        serde_json::Value::String("Routinely omit, replace with synonyms, or skip registered_hard_words when the passage could reasonably include them.".into()),
+        serde_json::Value::String(format!("Exceed {max_s} sentences in full_text or more than {max_g} gap words in hard_words.")),
+        serde_json::Value::String("Produce disconnected or random sentences that do not read as one flowing story.".into()),
+    ];
+    let mut must = vec![
+        serde_json::Value::String(format!("Keep full_text to at most {max_s} sentences and hard_words to at most {max_g} entries (see system message).")),
+        serde_json::Value::String("Make sentences connect into a single coherent story: clear progression, sensible links between sentences, no abrupt jumps unless intentional (e.g. twist).".into()),
+        serde_json::Value::String("For each gap in hard_words: exact spelling in full_text and correct Unicode scalar start_char/end_char.".into()),
+        serde_json::Value::String(format!("If registered_hard_words has {max_g} or fewer items, prefer gapping all of them; if more than {max_g}, gap at most {max_g} and choose the best-fitting subset.")),
+        serde_json::Value::String("Include only substrings of full_text in hard_words; keep full_text within the max word count from the system message.".into()),
+    ];
+    if gap.llm_template == GapFillLlmTemplate::MorphologyDistractors {
+        must_not.push(serde_json::Value::String(
+            "Put wrong case/gender/number on gap surfaces inside full_text — wrong inflections belong in fake_words only.".into(),
+        ));
+        must.push(serde_json::Value::String(
+            "Populate fake_words with plausible wrong inflections (case, agreement) contrasting with the correct gap surfaces in full_text.".into(),
+        ));
+    }
     json!({
         "language": language,
         "learning_items": items,
         "registered_hard_words": registered_hard_words,
         "distractors_per_gap": gap.distractors_per_gap,
         "scoring_mode": gap.scoring_mode,
+        "llm_template": gap.llm_template,
         "passage_authoring": {
             "target_language": language,
             "goal": "Generate one original, cohesive mini-story (connected sentences forming a single narrative) so the learner trains on the supplied hard words as gaps.",
@@ -59,20 +100,8 @@ pub fn passage_gap_user_message_json(
                 "max_gap_words": max_g,
                 "note": note
             },
-            "must_not": [
-                "Use learning_items source_text or context_text as the passage body or as consecutive stitched paragraphs.",
-                "Change language away from target_language.",
-                "Routinely omit, replace with synonyms, or skip registered_hard_words when the passage could reasonably include them.",
-                format!("Exceed {max_s} sentences in full_text or more than {max_g} gap words in hard_words."),
-                "Produce disconnected or random sentences that do not read as one flowing story."
-            ],
-            "must": [
-                format!("Keep full_text to at most {max_s} sentences and hard_words to at most {max_g} entries (see system message)."),
-                "Make sentences connect into a single coherent story: clear progression, sensible links between sentences, no abrupt jumps unless intentional (e.g. twist).",
-                "For each gap in hard_words: exact spelling in full_text and correct Unicode scalar start_char/end_char.",
-                format!("If registered_hard_words has {max_g} or fewer items, prefer gapping all of them; if more than {max_g}, gap at most {max_g} and choose the best-fitting subset."),
-                "Include only substrings of full_text in hard_words; keep full_text within the max word count from the system message."
-            ],
+            "must_not": must_not,
+            "must": must,
             "exceptions": exceptions
         }
     })

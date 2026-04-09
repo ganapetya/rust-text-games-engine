@@ -4,15 +4,15 @@ use crate::deps::EngineDeps;
 use crate::errors::AppError;
 use crate::ports::ContentRequest;
 use crate::services::create_game_session::SessionOptions;
+use crate::services::translation_hint::normalize_hint_translation_languages;
 use serde::Deserialize;
 use shakti_game_domain::{GameSessionId, GameSessionState, UserId};
 
 #[derive(Deserialize)]
 struct DeferredPayload {
     content_request: ContentRequest,
-    /// Reserved for future use when materializing the session (timing is applied at create).
     #[serde(default)]
-    _session_options: SessionOptions,
+    session_options: SessionOptions,
     trace_id: Option<String>,
 }
 
@@ -115,6 +115,19 @@ pub async fn start_game_session(
 
     let mut base_context =
         serde_json::to_value(&passage).map_err(|e| AppError::Repository(e.to_string()))?;
+
+    let hint_langs =
+        normalize_hint_translation_languages(deferred.session_options.hint_translation_languages.as_ref());
+    if let Some(obj) = base_context.as_object_mut() {
+        obj.insert(
+            "_session".to_string(),
+            serde_json::json!({
+                "source_language": lang,
+                "hint_translation_languages": hint_langs,
+                "translation_cache": serde_json::json!({}),
+            }),
+        );
+    }
 
     if deps.dev_expose_gap_solution {
         if let Some(obj) = base_context.as_object_mut() {

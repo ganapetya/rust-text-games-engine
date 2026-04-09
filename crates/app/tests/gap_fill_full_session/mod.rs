@@ -9,7 +9,7 @@ use shakti_game_domain::GameResult;
 use shakti_game_engine::support::{
     build_app_router, build_app_state, connect_pool, run_migrations,
 };
-use shakti_game_infrastructure::{build_llm_preparer, LlmMode};
+use shakti_game_infrastructure::{build_llm_stack, LlmMode};
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::postgres::Postgres;
 use uuid::Uuid;
@@ -34,7 +34,7 @@ async fn gap_fill_full_session_lifecycle() {
     let pool = connect_pool(&url).await.expect("connect pool");
     run_migrations(&pool).await.expect("migrations");
 
-    let llm = build_llm_preparer(
+    let (llm, translator) = build_llm_stack(
         LlmMode::Mock,
         None,
         "gpt-4o-mini".into(),
@@ -42,8 +42,8 @@ async fn gap_fill_full_session_lifecycle() {
         "openai_main".into(),
         "shakti-game-engine".into(),
     )
-    .expect("llm preparer");
-    let app: Router = build_app_router(build_app_state(pool, llm, false, None));
+    .expect("llm stack");
+    let app: Router = build_app_router(build_app_state(pool, llm, translator, false, None));
     let user = Uuid::parse_str(USER_ID).unwrap();
 
     let (st, body) = json_roundtrip(
@@ -54,6 +54,7 @@ async fn gap_fill_full_session_lifecycle() {
             "userId": user,
             "gameKind": "gap_fill",
             "contentRequest": { "source": "hard_words", "limit": 10, "language": "no" },
+            "options": { "hintTranslationLanguages": ["en"] },
         })),
     )
     .await;
@@ -72,6 +73,23 @@ async fn gap_fill_full_session_lifecycle() {
     assert_status(st, StatusCode::OK, &body);
     assert_eq!(body["state"], "in_progress");
     assert_eq!(body["stepsCount"], 1);
+    assert_eq!(body["sourceLanguage"], "no");
+    assert_eq!(body["hintTranslationLanguages"], json!(["en"]));
+
+    let (st, tr) = json_roundtrip(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/game-sessions/{session_id}/hint/translation"),
+        Some(json!({ "userId": user, "targetLanguage": "en" })),
+    )
+    .await;
+    assert_status(st, StatusCode::OK, &tr);
+    let translated = tr["translatedText"].as_str().expect("translatedText");
+    assert!(
+        translated.starts_with("[no→en]"),
+        "mock translator prefix: {}",
+        translated
+    );
 
     let (st, view) = json_roundtrip(
         app.clone(),

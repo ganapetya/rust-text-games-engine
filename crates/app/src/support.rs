@@ -5,9 +5,10 @@ use shakti_game_api::{build_router, AppState};
 use shakti_game_domain::{GameEngineRegistry, GapFillEngine};
 use shakti_game_engine_core::{EngineDeps, LlmContentPreparer};
 use shakti_game_infrastructure::{
-    build_llm_preparer, DbContentProvider, PgGameDefinitionRepository, PgGameSessionRepository,
+    build_llm_stack, DbContentProvider, PgGameDefinitionRepository, PgGameSessionRepository,
     PgHardWordsRepository, PgSessionEventRepository, SystemClock,
 };
+use shakti_game_translation::LlmTextTranslator;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 
@@ -25,6 +26,7 @@ pub async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::migrate::Mi
 pub fn build_engine_deps(
     pool: sqlx::PgPool,
     llm_preparer: Arc<dyn LlmContentPreparer>,
+    llm_translator: Arc<dyn LlmTextTranslator>,
     dev_expose_gap_solution: bool,
 ) -> Arc<EngineDeps> {
     let mut engines = GameEngineRegistry::new();
@@ -40,6 +42,7 @@ pub fn build_engine_deps(
         clock: Arc::new(SystemClock),
         engines,
         llm_preparer,
+        llm_translator,
         dev_expose_gap_solution,
     })
 }
@@ -47,10 +50,16 @@ pub fn build_engine_deps(
 pub fn build_app_state(
     pool: sqlx::PgPool,
     llm_preparer: Arc<dyn LlmContentPreparer>,
+    llm_translator: Arc<dyn LlmTextTranslator>,
     dev_expose_gap_solution: bool,
     service_api_key: Option<String>,
 ) -> AppState {
-    let deps = build_engine_deps(pool.clone(), llm_preparer, dev_expose_gap_solution);
+    let deps = build_engine_deps(
+        pool.clone(),
+        llm_preparer,
+        llm_translator,
+        dev_expose_gap_solution,
+    );
     AppState {
         deps,
         pool,
@@ -59,11 +68,11 @@ pub fn build_app_state(
     }
 }
 
-/// Wires [`build_llm_preparer`] from process environment (see [`crate::config::Config`]).
-pub fn llm_preparer_from_config(
+/// Wires [`build_llm_stack`] from process environment (see [`crate::config::Config`]).
+pub fn llm_stack_from_config(
     config: &crate::config::Config,
-) -> Result<Arc<dyn LlmContentPreparer>, String> {
-    build_llm_preparer(
+) -> Result<(Arc<dyn LlmContentPreparer>, Arc<dyn LlmTextTranslator>), String> {
+    build_llm_stack(
         config.llm_mode,
         config.openai_api_key.clone(),
         config.openai_model.clone(),

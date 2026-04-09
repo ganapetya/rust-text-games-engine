@@ -11,8 +11,8 @@ use shakti_game_domain::{
 };
 use shakti_game_engine_core::{
     advance_session, create_game_session, get_game_result, get_game_session, play_again_gap_fill,
-    start_game_session, submit_answer, ContentRequest, CreateGameSessionCommand, SessionOptions,
-    SubmitAnswerCommand,
+    read_session_ui_hints, request_translation_hint, start_game_session, submit_answer,
+    ContentRequest, CreateGameSessionCommand, SessionOptions, SubmitAnswerCommand,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -27,6 +27,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/game-sessions", post(create_session))
         .route("/game-sessions/{session_id}/start", post(start_session))
         .route("/game-sessions/{session_id}/play-again", post(play_again_session))
+        .route(
+            "/game-sessions/{session_id}/hint/translation",
+            post(translation_hint),
+        )
         .route("/game-sessions/{session_id}", get(get_session))
         .route(
             "/game-sessions/{session_id}/steps/{step_id}/answer",
@@ -74,6 +78,8 @@ fn default_limit() -> i64 {
 #[serde(rename_all = "camelCase")]
 pub struct SessionOptionsDto {
     pub step_time_limit_secs: Option<u32>,
+    #[serde(default)]
+    pub hint_translation_languages: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -214,6 +220,7 @@ async fn bootstrap_session(
         },
         options: SessionOptions {
             step_time_limit_secs: body.options.step_time_limit_secs,
+            hint_translation_languages: body.options.hint_translation_languages.clone(),
         },
         content_package_audit: Some(body.content_package),
     };
@@ -247,6 +254,7 @@ async fn create_session(
         },
         options: SessionOptions {
             step_time_limit_secs: body.options.step_time_limit_secs,
+            hint_translation_languages: body.options.hint_translation_languages.clone(),
         },
         content_package_audit: None,
     };
@@ -307,6 +315,48 @@ async fn play_again_session(
         &session,
         state.dev_expose_gap_solution,
     )))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationHintBody {
+    pub user_id: Uuid,
+    pub target_language: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationHintResp {
+    pub translated_text: String,
+    pub source_language: String,
+    pub target_language: String,
+}
+
+async fn translation_hint(
+    Extension(trace): Extension<RequestTrace>,
+    State(state): State<Arc<AppState>>,
+    Path(session_id): Path<Uuid>,
+    Json(body): Json<TranslationHintBody>,
+) -> Result<Json<TranslationHintResp>, ApiError> {
+    tracing::info!(
+        user_id = %body.user_id,
+        trace_id = %trace.trace_id,
+        "translation_hint"
+    );
+    let out = request_translation_hint(
+        &state.deps,
+        GameSessionId(session_id),
+        UserId(body.user_id),
+        &body.target_language,
+        Some(trace.trace_id.as_str()),
+    )
+    .await
+    .map_err(ApiError::from_app_err)?;
+    Ok(Json(TranslationHintResp {
+        translated_text: out.translated_text,
+        source_language: out.source_language,
+        target_language: out.target_language,
+    }))
 }
 
 #[derive(Deserialize)]
@@ -416,6 +466,12 @@ pub struct SessionPublicView {
     pub steps_count: usize,
     pub score: ScoreDto,
     pub current_step: Option<StepPublic>,
+    /// Passage source language after materialize (from `_session`); UI translation hints.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_language: Option<String>,
+    /// Allowed target locales for `POST .../hint/translation` (normalized at materialize).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hint_translation_languages: Vec<String>,
     /// When `GAME_ENGINE_DEV_EXPOSE_GAP_SOLUTION` is set: LLM request summary (sources, hard words, language).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dev_llm_inputs: Option<serde_json::Value>,
@@ -467,6 +523,8 @@ fn to_public_view(session: &GameSession, dev_expose_gap_solution: bool) -> Sessi
     let current_step = session
         .current_step()
         .map(|s| step_public(s, dev_expose_gap_solution));
+    let (source_language, hint_translation_languages) =
+        read_session_ui_hints(&session.base_context);
     SessionPublicView {
         session_id: session.id.0,
         user_id: session.user_id.0,
@@ -475,6 +533,8 @@ fn to_public_view(session: &GameSession, dev_expose_gap_solution: bool) -> Sessi
         steps_count: session.steps.len(),
         score: ScoreDto::from(&session.score),
         current_step,
+        source_language,
+        hint_translation_languages,
         dev_llm_inputs: dev_llm_inputs_from_base(&session.base_context, dev_expose_gap_solution),
     }
 }

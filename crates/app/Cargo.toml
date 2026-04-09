@@ -17,6 +17,7 @@ shakti-game-domain = { path = "../domain" }
 shakti-game-engine-core = { path = "../engine" }
 shakti-game-infrastructure = { path = "../infrastructure" }
 shakti-game-api = { path = "../api" }
+shakti-game-translation = { path = "../translation" }
 tokio = { version = "1", features = ["full"] }
 axum = "0.8"
 tower-http = { version = "0.6", features = ["trace", "cors"] }

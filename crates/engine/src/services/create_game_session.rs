@@ -12,6 +12,9 @@ pub struct SessionOptions {
     /// Overrides per-step time limit from the loaded [`GameDefinition`] when set.
     #[serde(default)]
     pub step_time_limit_secs: Option<u32>,
+    /// Locale codes (e.g. BCP-47) allowed for optional full-text translation hints; normalized on materialize (max 16).
+    #[serde(default)]
+    pub hint_translation_languages: Option<Vec<String>>,
 }
 
 pub struct CreateGameSessionCommand {

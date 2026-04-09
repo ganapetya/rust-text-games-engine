@@ -1,26 +1,23 @@
-//! OpenAI gap-fill preparer that loads the API key from **shakti-actors** on first use
-//! (`GET /api/keys/get/{keyName}/{serviceName}`), matching encrypted `api_keys` rows
-//! (e.g. `openai_main` from `install-api-keys.sh`).
-//!
-//! Lazy fetch avoids startup ordering issues: `shakti-game-engine` starts before `shakti-actors`
-//! in Docker Compose, but the first game `start` runs later when actors is up.
+//! Single lazy OpenAI key fetch shared by gap-fill and full-text translation (same model).
 
 use async_trait::async_trait;
 use reqwest::Url;
 use shakti_game_domain::{GameDefinition, LearningItem, PassageGapLlmOutput, UserId};
 use shakti_game_engine_core::{AppError, LlmContentPreparer};
+use shakti_game_translation::{LlmTextTranslator, TranslationError, TranslationParams};
+use tokio::sync::RwLock;
 
-use super::OpenAiGapFillPreparer;
+use super::openai_gap_fill::OpenAiGapFillPreparer;
+use super::openai_text_translate::OpenAiLlmTextTranslator;
 
-/// Fetches `openai_main` (or configured name) once, then delegates to [`OpenAiGapFillPreparer`].
-pub struct ActorsResolvedOpenAiGapFillPreparer {
+pub struct ActorsResolvedOpenAiPair {
     key_fetch_url: Url,
     model: std::sync::Arc<str>,
     http: reqwest::Client,
-    cached: tokio::sync::RwLock<Option<OpenAiGapFillPreparer>>,
+    cached: RwLock<Option<(OpenAiGapFillPreparer, OpenAiLlmTextTranslator)>>,
 }
 
-impl ActorsResolvedOpenAiGapFillPreparer {
+impl ActorsResolvedOpenAiPair {
     pub fn new(
         actors_internal_base: impl Into<String>,
         key_name: impl Into<String>,
@@ -44,15 +41,13 @@ impl ActorsResolvedOpenAiGapFillPreparer {
             key_fetch_url,
             model: std::sync::Arc::from(model.into()),
             http,
-            cached: tokio::sync::RwLock::new(None),
+            cached: RwLock::new(None),
         })
     }
 
-    pub fn into_arc(self) -> std::sync::Arc<dyn LlmContentPreparer> {
-        std::sync::Arc::new(self)
-    }
-
-    async fn ensure_inner(&self) -> Result<OpenAiGapFillPreparer, AppError> {
+    async fn ensure_inner(
+        &self,
+    ) -> Result<(OpenAiGapFillPreparer, OpenAiLlmTextTranslator), AppError> {
         {
             let g = self.cached.read().await;
             if let Some(p) = g.as_ref() {
@@ -67,7 +62,7 @@ impl ActorsResolvedOpenAiGapFillPreparer {
 
         tracing::info!(
             url = %self.key_fetch_url,
-            "fetching OpenAI API key from shakti-actors"
+            "fetching OpenAI API key from shakti-actors (gap-fill + translate)"
         );
 
         let resp = self
@@ -104,13 +99,15 @@ impl ActorsResolvedOpenAiGapFillPreparer {
         }
 
         let preparer = OpenAiGapFillPreparer::new(key.to_string(), self.model.as_ref());
-        *g = Some(preparer.clone());
-        Ok(preparer)
+        let translator = OpenAiLlmTextTranslator::new(key.to_string(), self.model.as_ref());
+        let pair = (preparer.clone(), translator.clone());
+        *g = Some(pair.clone());
+        Ok(pair)
     }
 }
 
 #[async_trait]
-impl LlmContentPreparer for ActorsResolvedOpenAiGapFillPreparer {
+impl LlmContentPreparer for ActorsResolvedOpenAiPair {
     async fn build_passage_gap_context(
         &self,
         user_id: UserId,
@@ -120,16 +117,31 @@ impl LlmContentPreparer for ActorsResolvedOpenAiGapFillPreparer {
         language: &str,
         definition: &GameDefinition,
     ) -> Result<PassageGapLlmOutput, AppError> {
-        let inner = self.ensure_inner().await?;
-        inner
-            .build_passage_gap_context(
-                user_id,
-                trace_id,
-                learning_items,
-                registered_hard_words,
-                language,
-                definition,
-            )
+        let (prep, _) = self.ensure_inner().await?;
+        prep.build_passage_gap_context(
+            user_id,
+            trace_id,
+            learning_items,
+            registered_hard_words,
+            language,
+            definition,
+        )
+        .await
+    }
+}
+
+#[async_trait]
+impl LlmTextTranslator for ActorsResolvedOpenAiPair {
+    async fn translate(
+        &self,
+        user_id: &str,
+        trace_id: Option<&str>,
+        params: TranslationParams,
+    ) -> Result<String, TranslationError> {
+        let (_, trans) = self
+            .ensure_inner()
             .await
+            .map_err(|e| TranslationError::Api(e.to_string()))?;
+        trans.translate(user_id, trace_id, params).await
     }
 }

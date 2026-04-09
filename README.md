@@ -86,7 +86,10 @@ curl -s -X POST http://127.0.0.1:8010/api/v1/game-sessions \
     "userId": "11111111-1111-1111-1111-111111111111",
     "gameKind": "gap_fill",
     "contentRequest": { "source": "hard_words", "limit": 5, "language": "no" },
-    "options": { "stepTimeLimitSecs": 60 }
+    "options": {
+      "stepTimeLimitSecs": 60,
+      "hintTranslationLanguages": ["en", "de"]
+    }
   }'
 ```
 
@@ -103,6 +106,17 @@ Get session:
 ```bash
 curl -s 'http://127.0.0.1:8010/api/v1/game-sessions/SESSION_ID?userId=11111111-1111-1111-1111-111111111111'
 ```
+
+Session JSON includes **`sourceLanguage`** and **`hintTranslationLanguages`** after `start` when `options.hintTranslationLanguages` was set at create/bootstrap (normalized locale codes). While the session is **`in_progress`**, optional full-passage translation (same OpenAI model as gap-fill; **may reveal gap answers**):
+
+```bash
+curl -s -X POST http://127.0.0.1:8010/api/v1/game-sessions/SESSION_ID/hint/translation \
+  -H 'Content-Type: application/json' \
+  -H 'X-Trace-Id: my-trace-1' \
+  -d '{"userId":"11111111-1111-1111-1111-111111111111","targetLanguage":"en"}'
+```
+
+Repeat requests for the same target language are served from a per-session cache in `base_context._session.translation_cache`.
 
 Submit answer for passage gap-fill (replace `STEP_ID` from session view; `selections` in gap order, ordinal 0…n−1):
 

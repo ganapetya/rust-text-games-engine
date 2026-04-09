@@ -57,6 +57,16 @@ fn default_max_learning_items_for_llm() -> u32 {
     100
 }
 
+/// Which LLM instruction bundle to use for passage generation (`engine` crate).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum GapFillLlmTemplate {
+    #[default]
+    Standard,
+    /// Distractors may show wrong case/gender; passage uses correct forms; learner picks/writes the right inflection.
+    MorphologyDistractors,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GapFillPassageConfig {
     pub max_passage_words: u32,
@@ -73,6 +83,8 @@ pub struct GapFillPassageConfig {
     /// Ignored for inline `llm_source_texts` (item count follows text array length).
     #[serde(default = "default_max_learning_items_for_llm")]
     pub max_learning_items_for_llm: u32,
+    #[serde(default)]
+    pub llm_template: GapFillLlmTemplate,
 }
 
 impl Default for GapFillPassageConfig {
@@ -85,6 +97,7 @@ impl Default for GapFillPassageConfig {
             max_llm_gap_slots: default_max_llm_gap_slots(),
             max_llm_sentences: default_max_llm_sentences(),
             max_learning_items_for_llm: default_max_learning_items_for_llm(),
+            llm_template: GapFillLlmTemplate::Standard,
         }
     }
 }

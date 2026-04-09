@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 pub const PASSAGE_LLM_SCHEMA_VERSION: u32 = 1;
 
 /// Root JSON shape returned by the LLM (stored in `game_sessions.base_context` after validation).
+///
+/// After materialize, `base_context` may also contain sibling keys such as `_session` (engine-managed
+/// UI metadata and translation cache) and `_dev_llm_inputs` (dev-only); these are ignored when
+/// deserializing into this struct.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PassageGapLlmOutput {
     pub schema_version: u32,
@@ -89,7 +93,7 @@ impl PassageGapLlmOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::policies::{GapFillPassageConfig, GapFillScoringMode};
+    use crate::policies::{GapFillLlmTemplate, GapFillPassageConfig, GapFillScoringMode};
 
     fn sample_output() -> PassageGapLlmOutput {
         PassageGapLlmOutput {
@@ -114,6 +118,7 @@ mod tests {
             max_llm_gap_slots: 1,
             max_llm_sentences: 5,
             max_learning_items_for_llm: 100,
+            llm_template: GapFillLlmTemplate::Standard,
         }
     }
 

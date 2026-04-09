@@ -3,6 +3,7 @@ use crate::ports::{
     LlmContentPreparer, SessionEventRepository,
 };
 use shakti_game_domain::GameEngineRegistry;
+use shakti_game_translation::LlmTextTranslator;
 use std::sync::Arc;
 
 pub struct EngineDeps {
@@ -14,6 +15,7 @@ pub struct EngineDeps {
     pub clock: Arc<dyn Clock>,
     pub engines: Arc<GameEngineRegistry>,
     pub llm_preparer: Arc<dyn LlmContentPreparer>,
+    pub llm_translator: Arc<dyn LlmTextTranslator>,
     /// When true, session materialization may attach dev-only fields to `base_context` and the API may expose them.
     pub dev_expose_gap_solution: bool,
 }
