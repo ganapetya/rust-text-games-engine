@@ -28,11 +28,12 @@ pub async fn play_again_gap_fill(
 
     let passage: PassageGapLlmOutput = serde_json::from_value(session.base_context.clone())
         .map_err(|e| AppError::Repository(format!("stored passage (base_context): {e}")))?;
-    passage
-        .validate()
-        .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
 
     let definition = session.definition().map_err(AppError::Domain)?.clone();
+    let gap_cfg = definition.gap_fill_config().map_err(AppError::Domain)?;
+    passage
+        .validate_against_gap_fill_config(gap_cfg)
+        .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
     let engine = deps.engines.get(definition.kind)?;
 
     let items: Vec<LearningItem> = Vec::new();

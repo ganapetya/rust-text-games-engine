@@ -46,10 +46,17 @@ pub async fn start_game_session(
         .ok_or_else(|| AppError::BadRequest("content_request.language required".into()))?
         .to_string();
 
+    let definition = session.definition().map_err(AppError::Domain)?.clone();
+    let gap_cfg = definition.gap_fill_config().map_err(AppError::Domain)?;
+
+    let mut content_request = deferred.content_request.clone();
+    let cap = gap_cfg.max_learning_items_for_llm.max(1) as i64;
+    content_request.limit = content_request.limit.max(1).min(cap);
+
     let items = deps
         .content
-        .fetch_learning_items(user_id, deferred.content_request.clone())
-        .await?; // history snippets (`learning_items`)
+        .fetch_learning_items(user_id, content_request)
+        .await?; // history snippets (`learning_items`) or inline synthetic items
 
     if items.is_empty() {
         return Err(AppError::BadRequest(
@@ -82,7 +89,6 @@ pub async fn start_game_session(
         ));
     }
 
-    let definition = session.definition().map_err(AppError::Domain)?.clone();
     let trace = deferred.trace_id.as_deref();
 
     let passage = deps
@@ -98,8 +104,8 @@ pub async fn start_game_session(
         .await?; // LLM or mock → `PassageGapLlmOutput`
 
     passage
-        .validate()
-        .map_err(|e| AppError::LlmPreparation(e.to_string()))?; // span/surface checks before persistence
+        .validate_against_gap_fill_config(gap_cfg)
+        .map_err(|e| AppError::LlmPreparation(e.to_string()))?; // spans, word count, gap cap
 
     let engine = deps.engines.get(definition.kind)?; // `GapFillEngine`
     let mut prepared = engine.prepare_content(&items, &definition)?; // audit payload only; passage attached next

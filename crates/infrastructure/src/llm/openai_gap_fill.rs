@@ -47,7 +47,7 @@ impl LlmContentPreparer for OpenAiGapFillPreparer {
         language: &str,
         definition: &GameDefinition,
     ) -> Result<PassageGapLlmOutput, AppError> {
-        let max_words = definition.gap_fill_config().map(|c| c.max_passage_words).unwrap_or(600);
+        let gap = definition.gap_fill_config().map_err(AppError::from)?;
 
         tracing::info!(
             user_id = %user_id.0,
@@ -59,7 +59,7 @@ impl LlmContentPreparer for OpenAiGapFillPreparer {
 
         let system_msg = ChatCompletionRequestSystemMessage {
             content: ChatCompletionRequestSystemMessageContent::Text(
-                passage_gap_system_prompt(max_words, language),
+                passage_gap_system_prompt(gap, language),
             ),
             name: None,
         };
@@ -113,7 +113,7 @@ impl LlmContentPreparer for OpenAiGapFillPreparer {
             kept_gaps = out.hard_words.len(),
             "passage hard_words reconciled (orphan model entries dropped if not in full_text)"
         );
-        out.validate()
+        out.validate_against_gap_fill_config(gap)
             .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
         Ok(out)
     }

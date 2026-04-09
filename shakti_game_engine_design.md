@@ -873,6 +873,30 @@ Fields:
 - created_at TIMESTAMPTZ
 - active BOOLEAN
 
+#### Configuration taxonomy (where settings live)
+
+| Class | Purpose | Location | Examples |
+|--------|---------|----------|----------|
+| Gameplay / puzzle | What the learner sees; scoring; timers; LLM authoring caps | `game_definitions` (`config`, `scoring_policy`, `timing_policy`) | `max_passage_words`, `max_llm_gap_slots`, `max_learning_items_for_llm` |
+| Infrastructure / deployment | Process wiring, secrets, global dev flags | Environment (`crates/app/src/config.rs`) | `DATABASE_URL`, `GAME_ENGINE_LLM_MODE`, `OPENAI_MODEL`, `APP_PORT` |
+| Protocol / safety invariants | Cross-cutting contracts | Code | `PASSAGE_LLM_SCHEMA_VERSION`, JSON shapes, SQL schema |
+
+**Rule:** Per-definition or A/B-tunable behavior belongs in `game_definitions.config`. Deployment-specific or secret values stay in env.
+
+#### `gap_fill` config JSON (`type: "gap_fill"`)
+
+| Key | Type | Default (if omitted) | Meaning |
+|-----|------|----------------------|---------|
+| `max_passage_words` | number | — (required in practice) | Max words in `full_text` after LLM; enforced on validated output. |
+| `distractors_per_gap` | number | — | Gameplay: distractors per gap. |
+| `allow_skip` | boolean | — | Whether the learner may skip. |
+| `scoring_mode` | string | — | `per_gap` or `all_or_nothing`. |
+| `max_llm_gap_slots` | number | `10` | Max `hard_words` entries the model may return; enforced after reconciliation. |
+| `max_llm_sentences` | number | `5` | Prompt contract for sentence count in `full_text` (not heuristically validated in code). |
+| `max_learning_items_for_llm` | number | `100` | Cap on DB `learning_items` rows merged into `ContentRequest.limit` in `start_session` for the non-inline path; ignored when using inline `llm_source_texts`. |
+
+The Postgres content provider applies an additional **absolute ceiling** on `LIMIT` (DoS guard only; see `CONTENT_FETCH_ABSOLUTE_MAX` in `DbContentProvider`); the operator-visible cap is the merged `limit` from the definition.
+
 ### `game_sessions`
 Stores one concrete session.
 

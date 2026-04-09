@@ -45,12 +45,34 @@ pub enum GapFillScoringMode {
     AllOrNothing,
 }
 
+fn default_max_llm_gap_slots() -> u32 {
+    10
+}
+
+fn default_max_llm_sentences() -> u32 {
+    5
+}
+
+fn default_max_learning_items_for_llm() -> u32 {
+    100
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GapFillPassageConfig {
     pub max_passage_words: u32,
     pub distractors_per_gap: usize,
     pub allow_skip: bool,
     pub scoring_mode: GapFillScoringMode,
+    /// Max `hard_words` entries the LLM may return; also enforced after reconciliation.
+    #[serde(default = "default_max_llm_gap_slots")]
+    pub max_llm_gap_slots: u32,
+    /// Target max sentences in `full_text` (prompt contract; not validated heuristically in code).
+    #[serde(default = "default_max_llm_sentences")]
+    pub max_llm_sentences: u32,
+    /// Cap on `learning_items` rows loaded from DB for the LLM payload (`start_session` merges with `ContentRequest.limit`).
+    /// Ignored for inline `llm_source_texts` (item count follows text array length).
+    #[serde(default = "default_max_learning_items_for_llm")]
+    pub max_learning_items_for_llm: u32,
 }
 
 impl Default for GapFillPassageConfig {
@@ -60,6 +82,9 @@ impl Default for GapFillPassageConfig {
             distractors_per_gap: 2,
             allow_skip: false,
             scoring_mode: GapFillScoringMode::PerGap,
+            max_llm_gap_slots: default_max_llm_gap_slots(),
+            max_llm_sentences: default_max_llm_sentences(),
+            max_learning_items_for_llm: default_max_learning_items_for_llm(),
         }
     }
 }

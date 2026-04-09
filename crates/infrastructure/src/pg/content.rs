@@ -5,6 +5,9 @@ use shakti_game_engine_core::{AppError, ContentProvider, ContentRequest};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
+/// DoS guard only. Business cap comes from `game_definitions` (`max_learning_items_for_llm`), merged in `start_session` into `ContentRequest.limit`.
+const CONTENT_FETCH_ABSOLUTE_MAX: i64 = 10_000;
+
 pub struct DbContentProvider {
     pool: PgPool,
 }
@@ -56,7 +59,7 @@ impl ContentProvider for DbContentProvider {
             }
         }
 
-        let limit = request.limit.max(1).min(100);
+        let limit = request.limit.max(1).min(CONTENT_FETCH_ABSOLUTE_MAX);
 
         let rows = match &request.language {
             Some(lang) => {

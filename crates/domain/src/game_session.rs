@@ -351,6 +351,7 @@ mod tests {
                 distractors_per_gap: 1,
                 allow_skip: false,
                 scoring_mode: GapFillScoringMode::PerGap,
+                ..Default::default()
             }),
             scoring_policy: ScoringPolicy::FixedPerCorrect { points: 10 },
             timing_policy: TimingPolicy {

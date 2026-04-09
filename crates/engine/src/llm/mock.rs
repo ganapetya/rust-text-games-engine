@@ -40,8 +40,11 @@ impl LlmContentPreparer for MockLlmContentPreparer {
         learning_items: &[LearningItem],
         registered_hard_words: &[String],
         language: &str,
-        _definition: &GameDefinition,
+        definition: &GameDefinition,
     ) -> Result<PassageGapLlmOutput, AppError> {
+        let gap = definition.gap_fill_config().map_err(AppError::from)?;
+        let max_gaps = gap.max_llm_gap_slots as usize;
+
         tracing::info!(
             user_id = %user_id.0,
             trace_id = trace_id.unwrap_or(""),
@@ -68,6 +71,9 @@ impl LlmContentPreparer for MockLlmContentPreparer {
         let mut hard_words = Vec::new();
         let mut next_id = 0u32;
         for w in registered_hard_words {
+            if hard_words.len() >= max_gaps {
+                break;
+            }
             let w = w.trim();
             if w.is_empty() {
                 continue;
@@ -98,6 +104,9 @@ impl LlmContentPreparer for MockLlmContentPreparer {
 
         if hard_words.is_empty() {
             for li in learning_items {
+                if hard_words.len() >= max_gaps {
+                    break;
+                }
                 let w = li.hard_fragment.trim();
                 if w.is_empty() {
                     continue;
@@ -124,7 +133,7 @@ impl LlmContentPreparer for MockLlmContentPreparer {
                 "mock_distractor_c".into(),
             ],
         };
-        out.validate()
+        out.validate_against_gap_fill_config(gap)
             .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
         Ok(out)
     }
