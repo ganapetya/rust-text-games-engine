@@ -1,10 +1,13 @@
 //! On-demand full-text translation of the stored passage (`PassageGapLlmOutput.full_text`).
 
+use crate::billing::{read_wallet_from_base, wallet_llm_blocked};
 use crate::deps::EngineDeps;
 use crate::errors::AppError;
+use crate::ports::GameLlmChargeArgs;
 use shakti_game_domain::{
     GameSessionId, GameSessionState, PassageGapLlmOutput, UserId,
 };
+use shakti_game_pricing::coins_for_usage;
 use shakti_game_translation::TranslationParams;
 
 const MAX_HINT_LANGS: usize = 16;
@@ -99,6 +102,14 @@ pub async fn request_translation_hint(
         )));
     }
 
+    if let Some(w) = read_wallet_from_base(&session.base_context) {
+        if wallet_llm_blocked(&w) {
+            return Err(AppError::InsufficientBalance(
+                "Insufficient balance for translation hints. Please purchase more points.".into(),
+            ));
+        }
+    }
+
     let passage: PassageGapLlmOutput = serde_json::from_value(session.base_context.clone())
         .map_err(|e| AppError::Repository(format!("stored passage (base_context): {e}")))?;
 
@@ -135,7 +146,7 @@ pub async fn request_translation_hint(
         "translation_hint llm call"
     );
 
-    let translated = deps
+    let (translated, usage) = deps
         .llm_translator
         .translate(
             &user_id.0.to_string(),
@@ -148,6 +159,30 @@ pub async fn request_translation_hint(
         )
         .await
         .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
+
+    if let (Some(ref sched), Some(ref wallet)) = (
+        &deps.billing_scheduler,
+        read_wallet_from_base(&session.base_context),
+    ) {
+        let coins = coins_for_usage(
+            usage.prompt_tokens,
+            usage.completion_tokens,
+            wallet.billing_rates.translate.input_per_1k,
+            wallet.billing_rates.translate.output_per_1k,
+        );
+        if coins > 0 {
+            sched.schedule_game_llm_charge(GameLlmChargeArgs {
+                session_id,
+                shakti_user_id: wallet.shakti_user_id,
+                trace_id: trace_id.unwrap_or("").to_string(),
+                variant: wallet.billing_rates.variant.clone(),
+                prompt_tokens: usage.prompt_tokens,
+                completion_tokens: usage.completion_tokens,
+                coins,
+                endpoint: "/game/translate",
+            });
+        }
+    }
 
     if let Some(root) = session.base_context.as_object_mut() {
         let session_obj = root

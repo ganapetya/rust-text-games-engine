@@ -36,6 +36,8 @@ pub struct Config {
     pub dev_expose_gap_solution: bool,
     /// Shared secret for server-to-server `POST /api/v1/game-sessions/bootstrap` only.
     pub service_api_key: Option<String>,
+    /// When true, LLM requires `shaktiUserId` + `billingRates` on every new session (standalone stricter mode).
+    pub require_billing_for_llm: bool,
 }
 
 fn env_truthy(var: &str) -> bool {
@@ -129,6 +131,8 @@ impl Config {
             .ok()
             .and_then(|s| trim_key(&s));
 
+        let require_billing_for_llm = env_truthy("GAME_ENGINE_REQUIRE_BILLING_FOR_LLM");
+
         if llm_mode == LlmMode::OpenAi
             && openai_api_key.is_none()
             && shakti_actors_internal_url.is_some()
@@ -148,6 +152,7 @@ impl Config {
             shakti_actors_openai_consumer_service,
             dev_expose_gap_solution,
             service_api_key,
+            require_billing_for_llm,
         })
     }
 }

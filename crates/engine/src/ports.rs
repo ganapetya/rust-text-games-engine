@@ -4,9 +4,12 @@ use shakti_game_domain::{
     GameDefinition, GameSession, GameSessionId, GameStep, LearningItem, PassageGapLlmOutput,
     UserId,
 };
+use std::sync::Arc;
 use time::OffsetDateTime;
 
 use crate::errors::AppError;
+use shakti_game_pricing::GameBillingRates;
+use shakti_game_translation::LlmTokenUsage;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ContentRequest {
@@ -21,6 +24,34 @@ pub struct ContentRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub llm_hard_words: Option<Vec<String>>,
 }
+
+/// Optional wallet identity and rates from shakti-actors bootstrap (standalone engine may omit).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionBillingBootstrap {
+    pub shakti_user_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub billing_rates: Option<GameBillingRates>,
+}
+
+/// Fire-and-forget LogosCat coin debit after an LLM call (implemented in infrastructure).
+pub struct GameLlmChargeArgs {
+    pub session_id: GameSessionId,
+    pub shakti_user_id: i64,
+    pub trace_id: String,
+    pub variant: String,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub coins: i64,
+    /// `/game/prepare` or `/game/translate`
+    pub endpoint: &'static str,
+}
+
+pub trait BillingChargeScheduler: Send + Sync {
+    fn schedule_game_llm_charge(&self, args: GameLlmChargeArgs);
+}
+
+pub type DynBillingChargeScheduler = Arc<dyn BillingChargeScheduler>;
 
 #[async_trait]
 pub trait GameSessionRepository: Send + Sync {
@@ -93,5 +124,5 @@ pub trait LlmContentPreparer: Send + Sync {
         registered_hard_words: &[String],
         language: &str,
         definition: &GameDefinition,
-    ) -> Result<PassageGapLlmOutput, AppError>;
+    ) -> Result<(PassageGapLlmOutput, LlmTokenUsage), AppError>;
 }

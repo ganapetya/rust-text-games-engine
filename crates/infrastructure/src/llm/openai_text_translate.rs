@@ -9,8 +9,8 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use shakti_game_engine_core::llm::strip_code_fences;
 use shakti_game_translation::{
-    translation_system_prompt, translation_user_message_json, LlmTextTranslator, TranslationError,
-    TranslationParams,
+    translation_system_prompt, translation_user_message_json, LlmTextTranslator, LlmTokenUsage,
+    TranslationError, TranslationParams,
 };
 use std::sync::Arc;
 
@@ -47,7 +47,7 @@ impl LlmTextTranslator for OpenAiLlmTextTranslator {
         user_id: &str,
         trace_id: Option<&str>,
         params: TranslationParams,
-    ) -> Result<String, TranslationError> {
+    ) -> Result<(String, LlmTokenUsage), TranslationError> {
         tracing::info!(
             user_id = %user_id,
             trace_id = trace_id.unwrap_or(""),
@@ -96,6 +96,14 @@ impl LlmTextTranslator for OpenAiLlmTextTranslator {
             .await
             .map_err(|e| TranslationError::Api(format!("openai chat completion: {e}")))?;
 
+        let usage = response
+            .usage
+            .map(|u| LlmTokenUsage {
+                prompt_tokens: u.prompt_tokens as u64,
+                completion_tokens: u.completion_tokens as u64,
+            })
+            .unwrap_or_default();
+
         let text = response
             .choices
             .first()
@@ -111,6 +119,6 @@ impl LlmTextTranslator for OpenAiLlmTextTranslator {
         if out.is_empty() {
             return Err(TranslationError::EmptyResponse);
         }
-        Ok(out)
+        Ok((out, usage))
     }
 }

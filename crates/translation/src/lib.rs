@@ -10,6 +10,13 @@ pub use prompt::{translation_system_prompt, translation_user_message_json};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+/// Token usage reported by the chat completion API (for billing).
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub struct LlmTokenUsage {
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranslationParams {
     pub source_lang: String,
@@ -35,5 +42,5 @@ pub trait LlmTextTranslator: Send + Sync {
         user_id: &str,
         trace_id: Option<&str>,
         params: TranslationParams,
-    ) -> Result<String, TranslationError>;
+    ) -> Result<(String, LlmTokenUsage), TranslationError>;
 }

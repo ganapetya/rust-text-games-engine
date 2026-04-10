@@ -18,5 +18,5 @@ async-trait = "0.1"
 tracing = "0.1"
 async-openai = { version = "0.34", features = ["chat-completion"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
-tokio = { version = "1", features = ["sync"] }
+tokio = { version = "1", features = ["sync", "rt", "macros"] }
 url = "2"

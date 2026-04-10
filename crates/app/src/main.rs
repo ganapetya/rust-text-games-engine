@@ -29,6 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         shakti_actors_openai_key_url_configured = config.shakti_actors_internal_url.is_some(),
         dev_expose_gap_solution = config.dev_expose_gap_solution,
         game_bootstrap_configured = config.service_api_key.is_some(),
+        require_billing_for_llm = config.require_billing_for_llm,
         "game engine config loaded"
     );
 
@@ -55,6 +56,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         llm_translator,
         config.dev_expose_gap_solution,
         config.service_api_key.clone(),
+        config.shakti_actors_internal_url.clone(),
+        config.require_billing_for_llm,
     );
     let app = support::build_app_router(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], config.app_port));

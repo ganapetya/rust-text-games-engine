@@ -2441,6 +2441,7 @@ dependencies = [
  "shakti-game-domain",
  "shakti-game-engine-core",
  "shakti-game-infrastructure",
+ "shakti-game-pricing",
  "sqlx",
  "thiserror 2.0.18",
  "time",
@@ -2495,6 +2496,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shakti-game-domain",
+ "shakti-game-pricing",
  "shakti-game-translation",
  "thiserror 2.0.18",
  "time",
@@ -2521,6 +2523,14 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "shakti-game-pricing"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

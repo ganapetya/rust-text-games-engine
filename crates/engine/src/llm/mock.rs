@@ -6,6 +6,7 @@ use shakti_game_domain::{
 
 use crate::errors::AppError;
 use crate::ports::LlmContentPreparer;
+use shakti_game_translation::LlmTokenUsage;
 
 /// Deterministic passage builder for tests and offline runs (no HTTP).
 #[derive(Debug, Default, Clone)]
@@ -41,7 +42,7 @@ impl LlmContentPreparer for MockLlmContentPreparer {
         registered_hard_words: &[String],
         language: &str,
         definition: &GameDefinition,
-    ) -> Result<PassageGapLlmOutput, AppError> {
+    ) -> Result<(PassageGapLlmOutput, LlmTokenUsage), AppError> {
         let gap = definition.gap_fill_config().map_err(AppError::from)?;
         let max_gaps = gap.max_llm_gap_slots as usize;
 
@@ -135,6 +136,6 @@ impl LlmContentPreparer for MockLlmContentPreparer {
         };
         out.validate_against_gap_fill_config(gap)
             .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
-        Ok(out)
+        Ok((out, LlmTokenUsage::default()))
     }
 }

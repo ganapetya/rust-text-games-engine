@@ -1,12 +1,14 @@
 //! Materializes a **Draft**: loads content + vocabulary, runs LLM, persists [`GameSession::base_context`] and steps, then starts play.
 
+use crate::billing::{wallet_from_deferred, write_wallet_to_base};
 use crate::deps::EngineDeps;
 use crate::errors::AppError;
-use crate::ports::ContentRequest;
+use crate::ports::{ContentRequest, GameLlmChargeArgs};
 use crate::services::create_game_session::SessionOptions;
 use crate::services::translation_hint::normalize_hint_translation_languages;
 use serde::Deserialize;
 use shakti_game_domain::{GameSessionId, GameSessionState, UserId};
+use shakti_game_pricing::coins_for_usage;
 
 #[derive(Deserialize)]
 struct DeferredPayload {
@@ -38,6 +40,13 @@ pub async fn start_game_session(
         .ok_or_else(|| AppError::Conflict("missing deferred_payload".into()))?;
     let deferred: DeferredPayload = serde_json::from_value(deferred_raw.clone())
         .map_err(|e| AppError::Repository(format!("deferred payload: {e}")))?;
+
+    let wallet_opt = wallet_from_deferred(&deferred_raw);
+    if deps.require_billing_for_llm && wallet_opt.is_none() {
+        return Err(AppError::BadRequest(
+            "billing metadata required for LLM (shaktiUserId and billingRates)".into(),
+        ));
+    }
 
     let lang = deferred
         .content_request
@@ -91,7 +100,7 @@ pub async fn start_game_session(
 
     let trace = deferred.trace_id.as_deref();
 
-    let passage = deps
+    let (passage, usage) = deps
         .llm_preparer
         .build_passage_gap_context(
             user_id,
@@ -127,6 +136,11 @@ pub async fn start_game_session(
                 "translation_cache": serde_json::json!({}),
             }),
         );
+    }
+
+    if let Some(ref w) = wallet_opt {
+        write_wallet_to_base(&mut base_context, w)
+            .map_err(|e| AppError::Repository(format!("wallet in base_context: {e}")))?;
     }
 
     if deps.dev_expose_gap_solution {
@@ -165,6 +179,28 @@ pub async fn start_game_session(
             return Err(AppError::Forbidden);
         }
         return Ok(s);
+    }
+
+    if let (Some(ref sched), Some(ref wallet)) = (&deps.billing_scheduler, &wallet_opt) {
+        let coins = coins_for_usage(
+            usage.prompt_tokens,
+            usage.completion_tokens,
+            wallet.billing_rates.prepare.input_per_1k,
+            wallet.billing_rates.prepare.output_per_1k,
+        );
+        if coins > 0 {
+            let trace_owned = trace.unwrap_or("").to_string();
+            sched.schedule_game_llm_charge(GameLlmChargeArgs {
+                session_id,
+                shakti_user_id: wallet.shakti_user_id,
+                trace_id: trace_owned,
+                variant: wallet.billing_rates.variant.clone(),
+                prompt_tokens: usage.prompt_tokens,
+                completion_tokens: usage.completion_tokens,
+                coins,
+                endpoint: "/game/prepare",
+            });
+        }
     }
 
     deps.events

@@ -8,6 +8,7 @@ license.workspace = true
 shakti-game-domain = { path = "../domain" }
 shakti-game-engine-core = { path = "../engine" }
 shakti-game-infrastructure = { path = "../infrastructure" }
+shakti-game-pricing = { path = "../pricing" }
 axum = { version = "0.8", features = ["macros", "json"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "cors"] }

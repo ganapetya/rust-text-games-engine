@@ -2,7 +2,7 @@
 
 use crate::deps::EngineDeps;
 use crate::errors::AppError;
-use crate::ports::ContentRequest;
+use crate::ports::{ContentRequest, SessionBillingBootstrap};
 use serde::{Deserialize, Serialize};
 use shakti_game_domain::{GameKind, GameSession, GameSessionId, UserId};
 use uuid::Uuid;
@@ -26,6 +26,7 @@ pub struct CreateGameSessionCommand {
     pub options: SessionOptions,
     /// Original `contentPackage` from bootstrap (audit); omitted for public create.
     pub content_package_audit: Option<serde_json::Value>,
+    pub billing: SessionBillingBootstrap,
 }
 
 /// Persists `Draft` + deferred payload; no LLM or steps yet.
@@ -60,6 +61,21 @@ pub async fn create_game_session(
     if let Some(pkg) = &cmd.content_package_audit {
         if let Some(obj) = deferred.as_object_mut() {
             obj.insert("content_package".to_string(), pkg.clone());
+        }
+    }
+    if cmd.billing.shakti_user_id.is_some() || cmd.billing.billing_rates.is_some() {
+        if let Some(obj) = deferred.as_object_mut() {
+            if let Some(uid) = cmd.billing.shakti_user_id {
+                obj.insert("shaktiUserId".to_string(), serde_json::json!(uid));
+            }
+            if let Some(ref rates) = cmd.billing.billing_rates {
+                obj.insert(
+                    "billingRates".to_string(),
+                    serde_json::to_value(rates).map_err(|e| {
+                        AppError::Repository(format!("billingRates json: {e}"))
+                    })?,
+                );
+            }
         }
     }
 

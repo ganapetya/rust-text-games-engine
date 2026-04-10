@@ -12,6 +12,7 @@ use shakti_game_engine_core::llm::{
     reconcile_hard_word_spans,
 };
 use shakti_game_engine_core::{AppError, LlmContentPreparer};
+use shakti_game_translation::LlmTokenUsage;
 use std::sync::Arc;
 
 /// OpenAI Chat Completions → JSON → validated [`PassageGapLlmOutput`].
@@ -46,7 +47,7 @@ impl LlmContentPreparer for OpenAiGapFillPreparer {
         registered_hard_words: &[String],
         language: &str,
         definition: &GameDefinition,
-    ) -> Result<PassageGapLlmOutput, AppError> {
+    ) -> Result<(PassageGapLlmOutput, LlmTokenUsage), AppError> {
         let gap = definition.gap_fill_config().map_err(AppError::from)?;
 
         tracing::info!(
@@ -96,6 +97,14 @@ impl LlmContentPreparer for OpenAiGapFillPreparer {
             .await
             .map_err(|e| AppError::LlmPreparation(format!("openai chat completion: {e}")))?;
 
+        let usage = response
+            .usage
+            .map(|u| LlmTokenUsage {
+                prompt_tokens: u.prompt_tokens as u64,
+                completion_tokens: u.completion_tokens as u64,
+            })
+            .unwrap_or_default();
+
         let text = response
             .choices
             .first()
@@ -115,6 +124,6 @@ impl LlmContentPreparer for OpenAiGapFillPreparer {
         );
         out.validate_against_gap_fill_config(gap)
             .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
-        Ok(out)
+        Ok((out, usage))
     }
 }

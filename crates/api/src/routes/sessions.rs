@@ -11,10 +11,13 @@ use shakti_game_domain::{
 };
 use shakti_game_engine_core::{
     advance_session, create_game_session, get_game_result, get_game_session, play_again_gap_fill,
-    read_session_ui_hints, request_translation_hint, start_game_session, submit_answer,
-    ContentRequest, CreateGameSessionCommand, SessionOptions, SubmitAnswerCommand,
+    read_session_ui_hints, read_wallet_from_base, request_translation_hint, start_game_session,
+    submit_answer, ContentRequest, CreateGameSessionCommand, SessionBillingBootstrap, SessionOptions,
+    SubmitAnswerCommand,
 };
+use shakti_game_pricing::GameBillingRates;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::error::ApiError;
@@ -50,6 +53,10 @@ pub struct CreateSessionReq {
     pub content_request: ContentReqDto,
     #[serde(default)]
     pub options: SessionOptionsDto,
+    #[serde(default)]
+    pub shakti_user_id: Option<i64>,
+    #[serde(default)]
+    pub billing_rates: Option<GameBillingRates>,
 }
 
 #[derive(Deserialize, Default)]
@@ -103,6 +110,10 @@ pub struct BootstrapSessionReq {
     #[serde(default)]
     pub options: SessionOptionsDto,
     pub trace_id: Option<String>,
+    #[serde(default)]
+    pub shakti_user_id: Option<i64>,
+    #[serde(default)]
+    pub billing_rates: Option<GameBillingRates>,
 }
 
 fn extract_bootstrap_service_token(headers: &HeaderMap) -> Option<String> {
@@ -223,6 +234,10 @@ async fn bootstrap_session(
             hint_translation_languages: body.options.hint_translation_languages.clone(),
         },
         content_package_audit: Some(body.content_package),
+        billing: SessionBillingBootstrap {
+            shakti_user_id: body.shakti_user_id,
+            billing_rates: body.billing_rates,
+        },
     };
     let session = create_game_session(&state.deps, cmd)
         .await
@@ -257,6 +272,10 @@ async fn create_session(
             hint_translation_languages: body.options.hint_translation_languages.clone(),
         },
         content_package_audit: None,
+        billing: SessionBillingBootstrap {
+            shakti_user_id: body.shakti_user_id,
+            billing_rates: body.billing_rates,
+        },
     };
     let session = create_game_session(&state.deps, cmd)
         .await
@@ -290,10 +309,10 @@ async fn start_session(
     let session = start_game_session(&state.deps, sid, UserId(body.user_id))
         .await
         .map_err(ApiError::from_app_err)?;
-    Ok(Json(to_public_view(
-        &session,
-        state.dev_expose_gap_solution,
-    )))
+    Ok(Json(
+        session_public_view(&state, &session, trace.trace_id.as_str())
+            .await,
+    ))
 }
 
 async fn play_again_session(
@@ -311,10 +330,10 @@ async fn play_again_session(
     let session = play_again_gap_fill(&state.deps, sid, UserId(body.user_id))
         .await
         .map_err(ApiError::from_app_err)?;
-    Ok(Json(to_public_view(
-        &session,
-        state.dev_expose_gap_solution,
-    )))
+    Ok(Json(
+        session_public_view(&state, &session, trace.trace_id.as_str())
+            .await,
+    ))
 }
 
 #[derive(Deserialize)]
@@ -366,6 +385,7 @@ pub struct GetSessionQuery {
 }
 
 async fn get_session(
+    Extension(trace): Extension<RequestTrace>,
     State(state): State<Arc<AppState>>,
     Path(session_id): Path<Uuid>,
     Query(q): Query<GetSessionQuery>,
@@ -374,10 +394,10 @@ async fn get_session(
     let session = get_game_session(&state.deps, GameSessionId(session_id), UserId(q.user_id))
         .await
         .map_err(ApiError::from_app_err)?;
-    Ok(Json(to_public_view(
-        &session,
-        state.dev_expose_gap_solution,
-    )))
+    Ok(Json(
+        session_public_view(&state, &session, trace.trace_id.as_str())
+            .await,
+    ))
 }
 
 #[derive(Deserialize)]
@@ -426,6 +446,7 @@ pub struct AnswerResp {
 }
 
 async fn advance(
+    Extension(trace): Extension<RequestTrace>,
     State(state): State<Arc<AppState>>,
     Path(session_id): Path<Uuid>,
     Json(body): Json<UserActionBody>,
@@ -433,10 +454,10 @@ async fn advance(
     let session = advance_session(&state.deps, GameSessionId(session_id), UserId(body.user_id))
         .await
         .map_err(ApiError::from_app_err)?;
-    Ok(Json(to_public_view(
-        &session,
-        state.dev_expose_gap_solution,
-    )))
+    Ok(Json(
+        session_public_view(&state, &session, trace.trace_id.as_str())
+            .await,
+    ))
 }
 
 #[derive(Deserialize)]
@@ -475,6 +496,11 @@ pub struct SessionPublicView {
     /// When `GAME_ENGINE_DEV_EXPOSE_GAP_SOLUTION` is set: LLM request summary (sources, hard words, language).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dev_llm_inputs: Option<serde_json::Value>,
+    /// LogosCat coins (shakti-actors wallet) when session has `_billing`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wallet_balance: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub llm_spend_suspended: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -519,7 +545,7 @@ fn dev_llm_inputs_from_base(
     base.get("_dev_llm_inputs").cloned()
 }
 
-fn to_public_view(session: &GameSession, dev_expose_gap_solution: bool) -> SessionPublicView {
+fn sync_to_public_view(session: &GameSession, dev_expose_gap_solution: bool) -> SessionPublicView {
     let current_step = session
         .current_step()
         .map(|s| step_public(s, dev_expose_gap_solution));
@@ -536,7 +562,57 @@ fn to_public_view(session: &GameSession, dev_expose_gap_solution: bool) -> Sessi
         source_language,
         hint_translation_languages,
         dev_llm_inputs: dev_llm_inputs_from_base(&session.base_context, dev_expose_gap_solution),
+        wallet_balance: None,
+        llm_spend_suspended: None,
     }
+}
+
+const WALLET_BALANCE_CACHE_TTL: Duration = Duration::from_secs(10);
+
+async fn session_public_view(
+    state: &AppState,
+    session: &GameSession,
+    trace_id: &str,
+) -> SessionPublicView {
+    let mut v = sync_to_public_view(session, state.dev_expose_gap_solution);
+    let Some(wallet) = read_wallet_from_base(&session.base_context) else {
+        return v;
+    };
+    v.llm_spend_suspended = Some(wallet.llm_spend_suspended);
+    let sid = session.id.0;
+    let now = Instant::now();
+    let from_cache = state.balance_cache.lock().ok().and_then(|c| {
+        c.get(&sid).and_then(|(t, b)| {
+            if now.duration_since(*t) < WALLET_BALANCE_CACHE_TTL {
+                Some(*b)
+            } else {
+                None
+            }
+        })
+    });
+    if let Some(b) = from_cache {
+        v.wallet_balance = Some(b);
+        return v;
+    }
+    if let Some(ref client) = state.billing_client {
+        match client
+            .fetch_balance(wallet.shakti_user_id, trace_id)
+            .await
+        {
+            Ok(b) => {
+                if let Ok(mut c) = state.balance_cache.lock() {
+                    c.insert(sid, (now, b));
+                }
+                v.wallet_balance = Some(b);
+            }
+            Err(_) => {
+                v.wallet_balance = wallet.cached_balance;
+            }
+        }
+    } else {
+        v.wallet_balance = wallet.cached_balance;
+    }
+    v
 }
 
 fn dev_gap_solution(step: &GameStep, expose: bool) -> Option<Vec<String>> {

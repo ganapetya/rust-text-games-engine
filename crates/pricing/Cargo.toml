@@ -1,0 +1,12 @@
+[package]
+name = "shakti-game-pricing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LogosCat coin cost from token counts (matches shakti-actors analysis pricing formula)"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0"

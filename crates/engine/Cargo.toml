@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 shakti-game-domain = { path = "../domain" }
+shakti-game-pricing = { path = "../pricing" }
 shakti-game-translation = { path = "../translation" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -43,7 +43,15 @@ async fn gap_fill_full_session_lifecycle() {
         "shakti-game-engine".into(),
     )
     .expect("llm stack");
-    let app: Router = build_app_router(build_app_state(pool, llm, translator, false, None));
+    let app: Router = build_app_router(build_app_state(
+        pool,
+        llm,
+        translator,
+        false,
+        None,
+        None,
+        false,
+    ));
     let user = Uuid::parse_str(USER_ID).unwrap();
 
     let (st, body) = json_roundtrip(

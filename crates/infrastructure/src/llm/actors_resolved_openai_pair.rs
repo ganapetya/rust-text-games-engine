@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use reqwest::Url;
 use shakti_game_domain::{GameDefinition, LearningItem, PassageGapLlmOutput, UserId};
 use shakti_game_engine_core::{AppError, LlmContentPreparer};
-use shakti_game_translation::{LlmTextTranslator, TranslationError, TranslationParams};
+use shakti_game_translation::{LlmTextTranslator, LlmTokenUsage, TranslationError, TranslationParams};
 use tokio::sync::RwLock;
 
 use super::openai_gap_fill::OpenAiGapFillPreparer;
@@ -116,7 +116,7 @@ impl LlmContentPreparer for ActorsResolvedOpenAiPair {
         registered_hard_words: &[String],
         language: &str,
         definition: &GameDefinition,
-    ) -> Result<PassageGapLlmOutput, AppError> {
+    ) -> Result<(PassageGapLlmOutput, LlmTokenUsage), AppError> {
         let (prep, _) = self.ensure_inner().await?;
         prep.build_passage_gap_context(
             user_id,
@@ -137,7 +137,7 @@ impl LlmTextTranslator for ActorsResolvedOpenAiPair {
         user_id: &str,
         trace_id: Option<&str>,
         params: TranslationParams,
-    ) -> Result<String, TranslationError> {
+    ) -> Result<(String, LlmTokenUsage), TranslationError> {
         let (_, trans) = self
             .ensure_inner()
             .await

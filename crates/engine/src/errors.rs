@@ -23,4 +23,8 @@ pub enum AppError {
 
     #[error("llm preparation failed: {0}")]
     LlmPreparation(String),
+
+    /// Wallet / LogosCat coins — maps to HTTP 402 for play UI.
+    #[error("insufficient balance: {0}")]
+    InsufficientBalance(String),
 }
