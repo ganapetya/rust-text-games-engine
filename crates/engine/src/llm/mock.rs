@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use shakti_game_domain::{
-    GameDefinition, LearningItem, PassageGapLlmOutput, PassageHardWordOccurrence,
-    PASSAGE_LLM_SCHEMA_VERSION, UserId,
+    CorrectUsageLlmOutput, CorrectUsagePuzzleLlm, GameDefinition, LearningItem, PassageGapLlmOutput,
+    PassageHardWordOccurrence, PASSAGE_LLM_SCHEMA_VERSION, UserId,
 };
 
 use crate::errors::AppError;
@@ -136,6 +136,51 @@ impl LlmContentPreparer for MockLlmContentPreparer {
         };
         out.validate_against_gap_fill_config(gap)
             .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
+        Ok((out, LlmTokenUsage::default()))
+    }
+
+    async fn build_correct_usage_context(
+        &self,
+        user_id: UserId,
+        trace_id: Option<&str>,
+        learning_items: &[LearningItem],
+        registered_hard_words: &[String],
+        language: &str,
+        definition: &GameDefinition,
+    ) -> Result<(CorrectUsageLlmOutput, LlmTokenUsage), AppError> {
+        let cfg = definition.correct_usage_config().map_err(AppError::from)?;
+
+        tracing::info!(
+            user_id = %user_id.0,
+            trace_id = trace_id.unwrap_or(""),
+            mode = "mock",
+            items_in = learning_items.len(),
+            lang = language,
+            "llm correct_usage build (mock)"
+        );
+
+        let mut puzzles = Vec::new();
+        for w in registered_hard_words {
+            let w = w.trim();
+            if w.is_empty() {
+                continue;
+            }
+            let s0 = format!("{w} jeg liker kaffe.");
+            let s1 = format!("Jeg liker kaffe med {w}.");
+            let s2 = format!("Liker jeg {w} kaffe.");
+            puzzles.push(CorrectUsagePuzzleLlm {
+                word: w.to_string(),
+                sentences: vec![s0, s1, s2],
+                correct_index: 1,
+            });
+        }
+
+        let out = CorrectUsageLlmOutput {
+            schema_version: shakti_game_domain::CORRECT_USAGE_LLM_SCHEMA_VERSION,
+            puzzles,
+        };
+        out.validate(registered_hard_words, cfg.max_sentence_words)
+            .map_err(AppError::from)?;
         Ok((out, LlmTokenUsage::default()))
     }
 }

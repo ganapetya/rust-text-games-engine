@@ -12,7 +12,7 @@ pub enum DomainError {
     #[error("step already answered")]
     StepAlreadyAnswered,
 
-    #[error("step not active")]
+    #[error("step not active — duplicate submit or client out of sync with the server; refresh the page and submit once per step")]
     StepNotActive,
 
     #[error("step timed out")]
@@ -41,4 +41,7 @@ pub enum DomainError {
 
     #[error("missing passage in prepared content")]
     MissingPassage,
+
+    #[error("missing correct usage batch in prepared content")]
+    MissingCorrectUsageBatch,
 }

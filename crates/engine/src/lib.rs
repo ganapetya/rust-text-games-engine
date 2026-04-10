@@ -14,7 +14,7 @@ pub use ports::{
     LlmContentPreparer, SessionBillingBootstrap, SessionEventRepository,
 };
 pub use services::{
-    advance_session, create_game_session, get_game_result, get_game_session, play_again_gap_fill,
+    advance_session, create_game_session, get_game_result, get_game_session, play_again,
     read_session_ui_hints, request_translation_hint, start_game_session, submit_answer,
     CreateGameSessionCommand, SessionOptions, SubmitAnswerCommand, TranslationHintOutput,
 };

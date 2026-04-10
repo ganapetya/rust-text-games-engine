@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-/// Game family; only `gap_fill` is implemented (passage-based).
+/// Game family: passage gap-fill and per-word usage choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GameKind {
     GapFill,
+    CorrectUsage,
 }
 
 /// Static definition for a game type (loaded from DB / seeded).
@@ -24,6 +25,18 @@ impl GameDefinition {
     pub fn gap_fill_config(&self) -> Result<&GapFillPassageConfig, crate::errors::DomainError> {
         match &self.config {
             GameConfig::GapFill(c) => Ok(c),
+            GameConfig::CorrectUsage(_) => Err(crate::errors::DomainError::InvalidTransition(
+                "not a gap_fill definition".into(),
+            )),
+        }
+    }
+
+    pub fn correct_usage_config(&self) -> Result<&CorrectUsageConfig, crate::errors::DomainError> {
+        match &self.config {
+            GameConfig::CorrectUsage(c) => Ok(c),
+            GameConfig::GapFill(_) => Err(crate::errors::DomainError::InvalidTransition(
+                "not a correct_usage definition".into(),
+            )),
         }
     }
 }
@@ -34,6 +47,32 @@ impl GameDefinition {
 pub enum GameConfig {
     #[serde(rename = "gap_fill")]
     GapFill(GapFillPassageConfig),
+    #[serde(rename = "correct_usage")]
+    CorrectUsage(CorrectUsageConfig),
+}
+
+fn default_max_sentence_words_correct_usage() -> u32 {
+    15
+}
+
+/// Rules for LLM batch + UI for “choose correct usage” (one step per hard word).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorrectUsageConfig {
+    /// Cap on `learning_items` sent to the LLM (merged with `ContentRequest.limit` in start_session).
+    #[serde(default = "default_max_learning_items_for_llm")]
+    pub max_learning_items_for_llm: u32,
+    /// Soft cap per sentence in prompts / validation (word count, whitespace-separated).
+    #[serde(default = "default_max_sentence_words_correct_usage")]
+    pub max_sentence_words: u32,
+}
+
+impl Default for CorrectUsageConfig {
+    fn default() -> Self {
+        Self {
+            max_learning_items_for_llm: default_max_learning_items_for_llm(),
+            max_sentence_words: default_max_sentence_words_correct_usage(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -7,7 +7,7 @@ use crate::ports::{ContentRequest, GameLlmChargeArgs};
 use crate::services::create_game_session::SessionOptions;
 use crate::services::translation_hint::normalize_hint_translation_languages;
 use serde::Deserialize;
-use shakti_game_domain::{GameSessionId, GameSessionState, UserId};
+use shakti_game_domain::{GameKind, GameSessionId, GameSessionState, UserId};
 use shakti_game_pricing::coins_for_usage;
 
 #[derive(Deserialize)]
@@ -56,10 +56,19 @@ pub async fn start_game_session(
         .to_string();
 
     let definition = session.definition().map_err(AppError::Domain)?.clone();
-    let gap_cfg = definition.gap_fill_config().map_err(AppError::Domain)?;
 
     let mut content_request = deferred.content_request.clone();
-    let cap = gap_cfg.max_learning_items_for_llm.max(1) as i64;
+    let cap_llm_items = match definition.kind {
+        GameKind::GapFill => definition
+            .gap_fill_config()
+            .map_err(AppError::Domain)?
+            .max_learning_items_for_llm,
+        GameKind::CorrectUsage => definition
+            .correct_usage_config()
+            .map_err(AppError::Domain)?
+            .max_learning_items_for_llm,
+    };
+    let cap = cap_llm_items.max(1) as i64;
     content_request.limit = content_request.limit.max(1).min(cap);
 
     let items = deps
@@ -100,30 +109,55 @@ pub async fn start_game_session(
 
     let trace = deferred.trace_id.as_deref();
 
-    let (passage, usage) = deps
-        .llm_preparer
-        .build_passage_gap_context(
-            user_id,
-            trace,
-            &items,
-            &vocabulary,
-            &lang,
-            &definition,
-        )
-        .await?; // LLM or mock → `PassageGapLlmOutput`
+    let engine = deps.engines.get(definition.kind)?;
+    let mut prepared = engine.prepare_content(&items, &definition)?;
 
-    passage
-        .validate_against_gap_fill_config(gap_cfg)
-        .map_err(|e| AppError::LlmPreparation(e.to_string()))?; // spans, word count, gap cap
-
-    let engine = deps.engines.get(definition.kind)?; // `GapFillEngine`
-    let mut prepared = engine.prepare_content(&items, &definition)?; // audit payload only; passage attached next
-    prepared.passage = Some(passage.clone());
-
-    let steps = engine.generate_steps(&prepared, &definition)?; // one multi-gap `GameStep`
-
-    let mut base_context =
-        serde_json::to_value(&passage).map_err(|e| AppError::Repository(e.to_string()))?;
+    let (steps, mut base_context, usage) = match definition.kind {
+        GameKind::GapFill => {
+            let gap_cfg = definition.gap_fill_config().map_err(AppError::Domain)?;
+            let (passage, usage) = deps
+                .llm_preparer
+                .build_passage_gap_context(
+                    user_id,
+                    trace,
+                    &items,
+                    &vocabulary,
+                    &lang,
+                    &definition,
+                )
+                .await?;
+            passage
+                .validate_against_gap_fill_config(gap_cfg)
+                .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
+            prepared.passage = Some(passage.clone());
+            let steps = engine.generate_steps(&prepared, &definition)?;
+            let base =
+                serde_json::to_value(&passage).map_err(|e| AppError::Repository(e.to_string()))?;
+            (steps, base, usage)
+        }
+        GameKind::CorrectUsage => {
+            let cu_cfg = definition.correct_usage_config().map_err(AppError::Domain)?;
+            let (batch, usage) = deps
+                .llm_preparer
+                .build_correct_usage_context(
+                    user_id,
+                    trace,
+                    &items,
+                    &vocabulary,
+                    &lang,
+                    &definition,
+                )
+                .await?;
+            batch
+                .validate(&vocabulary, cu_cfg.max_sentence_words)
+                .map_err(AppError::from)?;
+            prepared.correct_usage_batch = Some(batch.clone());
+            let steps = engine.generate_steps(&prepared, &definition)?;
+            let base =
+                serde_json::to_value(&batch).map_err(|e| AppError::Repository(e.to_string()))?;
+            (steps, base, usage)
+        }
+    };
 
     let hint_langs =
         normalize_hint_translation_languages(deferred.session_options.hint_translation_languages.as_ref());
@@ -209,6 +243,8 @@ pub async fn start_game_session(
             "session_started",
             serde_json::json!({
                 "at": now,
+                "game_kind": definition.kind,
+                "steps_count": session.steps.len(),
                 "passage_gaps": session.steps.first().map(|s| match &s.expected_answer {
                     shakti_game_domain::ExpectedAnswer::GapFillSlots { values } => values.len(),
                     _ => 0,

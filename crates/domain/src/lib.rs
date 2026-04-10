@@ -1,5 +1,6 @@
 pub mod answer;
 pub mod content;
+pub mod correct_usage_llm;
 pub mod engine;
 pub mod errors;
 pub mod game_session;
@@ -10,6 +11,7 @@ pub mod passage;
 pub mod policies;
 pub mod result;
 pub mod score;
+pub mod usage_quiz;
 
 pub use answer::{ExpectedAnswer, StepEvaluation, UserAnswer};
 pub use content::{LearningItem, PreparedContent, PreparedItem};
@@ -21,8 +23,12 @@ pub use gap_fill::GapFillEngine;
 pub use ids::{GameDefinitionId, GameSessionId, GameStepId, LearningItemId, UserId};
 pub use passage::{PassageGapLlmOutput, PassageHardWordOccurrence, PASSAGE_LLM_SCHEMA_VERSION};
 pub use policies::{
-    GameConfig, GameDefinition, GameKind, GapFillLlmTemplate, GapFillPassageConfig,
-    GapFillScoringMode, ScoringPolicy, TimingPolicy,
+    CorrectUsageConfig, GameConfig, GameDefinition, GameKind, GapFillLlmTemplate,
+    GapFillPassageConfig, GapFillScoringMode, ScoringPolicy, TimingPolicy,
 };
+pub use correct_usage_llm::{
+    CorrectUsageLlmOutput, CorrectUsagePuzzleLlm, CORRECT_USAGE_LLM_SCHEMA_VERSION,
+};
+pub use usage_quiz::CorrectUsageEngine;
 pub use result::GameResult;
 pub use score::Score;

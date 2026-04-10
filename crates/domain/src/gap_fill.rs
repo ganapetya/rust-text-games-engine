@@ -126,6 +126,7 @@ impl GameEngine for GapFillEngine {
                 source: "learning_items".into(),
             },
             passage: None,
+            correct_usage_batch: None,
         })
     }
 

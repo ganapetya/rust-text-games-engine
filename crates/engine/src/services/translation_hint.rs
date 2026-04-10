@@ -5,7 +5,7 @@ use crate::deps::EngineDeps;
 use crate::errors::AppError;
 use crate::ports::GameLlmChargeArgs;
 use shakti_game_domain::{
-    GameSessionId, GameSessionState, PassageGapLlmOutput, UserId,
+    GameKind, GameSessionId, GameSessionState, PassageGapLlmOutput, UserId,
 };
 use shakti_game_pricing::coins_for_usage;
 use shakti_game_translation::TranslationParams;
@@ -75,6 +75,12 @@ pub async fn request_translation_hint(
     if session.state != GameSessionState::InProgress {
         return Err(AppError::Conflict(
             "translation hint is only available while the session is in progress".into(),
+        ));
+    }
+
+    if session.definition().map_err(AppError::Domain)?.kind == GameKind::CorrectUsage {
+        return Err(AppError::BadRequest(
+            "translation hints are not available for correct_usage sessions".into(),
         ));
     }
 

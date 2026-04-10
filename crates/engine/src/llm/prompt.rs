@@ -1,7 +1,5 @@
 use serde_json::json;
-use shakti_game_domain::{
-    GameConfig, GameDefinition, GapFillLlmTemplate, GapFillPassageConfig, LearningItem,
-};
+use shakti_game_domain::{GapFillLlmTemplate, GapFillPassageConfig, LearningItem};
 
 fn morphology_template_addon(target_language: &str) -> String {
     format!(
@@ -47,14 +45,13 @@ Rules:
     base
 }
 
-/// User payload: items, registered words, target language, definition hints.
+/// User payload: items, registered words, target language, gap-fill config hints.
 pub fn passage_gap_user_message_json(
     items: &[LearningItem],
     registered_hard_words: &[String],
     language: &str,
-    definition: &GameDefinition,
+    gap: &GapFillPassageConfig,
 ) -> serde_json::Value {
-    let GameConfig::GapFill(gap) = &definition.config;
     let max_s = gap.max_llm_sentences;
     let max_g = gap.max_llm_gap_slots;
     let note = format!(

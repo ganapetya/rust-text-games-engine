@@ -39,15 +39,18 @@ pub async fn create_game_session(
         trace_id = cmd.trace_id.as_deref().unwrap_or(""),
         "create_game_session (draft)"
     );
-    if cmd.game_kind != GameKind::GapFill {
-        return Err(AppError::BadRequest("only gap_fill supported".into()));
-    }
-
-    let mut definition = if let Some(id) = cmd.definition_id {
-        deps.definitions.get(id).await? // loads row from `game_definitions`
-    } else {
-        deps.definitions.get_default_gap_fill().await? // latest active `gap_fill` definition
+    let mut definition = match (cmd.game_kind, cmd.definition_id) {
+        (_, Some(id)) => deps.definitions.get(id).await?,
+        (GameKind::GapFill, None) => deps.definitions.get_default_gap_fill().await?,
+        (GameKind::CorrectUsage, None) => deps.definitions.get_default_correct_usage().await?,
     };
+
+    if definition.kind != cmd.game_kind {
+        return Err(AppError::BadRequest(format!(
+            "definition kind {:?} does not match requested {:?}",
+            definition.kind, cmd.game_kind
+        )));
+    }
 
     if let Some(secs) = cmd.options.step_time_limit_secs {
         definition.timing_policy.per_step_limit_secs = Some(secs); // per-request override; not persisted to definition row

@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shakti_game_domain::{
-    GameDefinition, GameSession, GameSessionId, GameStep, LearningItem, PassageGapLlmOutput,
-    UserId,
+    CorrectUsageLlmOutput, GameDefinition, GameSession, GameSessionId, GameStep, LearningItem,
+    PassageGapLlmOutput, UserId,
 };
 use std::sync::Arc;
 use time::OffsetDateTime;
@@ -78,6 +78,7 @@ pub trait GameDefinitionRepository: Send + Sync {
         id: shakti_game_domain::GameDefinitionId,
     ) -> Result<GameDefinition, AppError>;
     async fn get_default_gap_fill(&self) -> Result<GameDefinition, AppError>;
+    async fn get_default_correct_usage(&self) -> Result<GameDefinition, AppError>;
 }
 
 #[async_trait]
@@ -125,4 +126,14 @@ pub trait LlmContentPreparer: Send + Sync {
         language: &str,
         definition: &GameDefinition,
     ) -> Result<(PassageGapLlmOutput, LlmTokenUsage), AppError>;
+
+    async fn build_correct_usage_context(
+        &self,
+        user_id: UserId,
+        trace_id: Option<&str>,
+        learning_items: &[LearningItem],
+        registered_hard_words: &[String],
+        language: &str,
+        definition: &GameDefinition,
+    ) -> Result<(CorrectUsageLlmOutput, LlmTokenUsage), AppError>;
 }

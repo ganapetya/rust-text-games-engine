@@ -10,7 +10,7 @@ use shakti_game_domain::{
     UserFacingStepPrompt, UserId,
 };
 use shakti_game_engine_core::{
-    advance_session, create_game_session, get_game_result, get_game_session, play_again_gap_fill,
+    advance_session, create_game_session, get_game_result, get_game_session, play_again,
     read_session_ui_hints, read_wallet_from_base, request_translation_hint, start_game_session,
     submit_answer, ContentRequest, CreateGameSessionCommand, SessionBillingBootstrap, SessionOptions,
     SubmitAnswerCommand,
@@ -325,9 +325,9 @@ async fn play_again_session(
     tracing::info!(
         user_id = %body.user_id,
         trace_id = %trace.trace_id,
-        "play_again_gap_fill"
+        "play_again"
     );
-    let session = play_again_gap_fill(&state.deps, sid, UserId(body.user_id))
+    let session = play_again(&state.deps, sid, UserId(body.user_id))
         .await
         .map_err(ApiError::from_app_err)?;
     Ok(Json(

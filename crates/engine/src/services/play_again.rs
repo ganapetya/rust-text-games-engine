@@ -1,12 +1,13 @@
-//! New playable round from the same stored passage (no LLM). Deletes old steps and inserts fresh ones.
+//! New playable round from the same stored LLM payload (no second LLM call). Deletes old steps and inserts fresh ones.
 
 use crate::deps::EngineDeps;
 use crate::errors::AppError;
 use shakti_game_domain::{
-    GameSession, GameSessionId, GameSessionState, LearningItem, PassageGapLlmOutput, UserId,
+    CorrectUsageLlmOutput, GameKind, GameSession, GameSessionId, GameSessionState, LearningItem,
+    PassageGapLlmOutput, UserId,
 };
 
-pub async fn play_again_gap_fill(
+pub async fn play_again(
     deps: &EngineDeps,
     session_id: GameSessionId,
     user_id: UserId,
@@ -26,21 +27,39 @@ pub async fn play_again_gap_fill(
         }
     }
 
-    let passage: PassageGapLlmOutput = serde_json::from_value(session.base_context.clone())
-        .map_err(|e| AppError::Repository(format!("stored passage (base_context): {e}")))?;
-
     let definition = session.definition().map_err(AppError::Domain)?.clone();
-    let gap_cfg = definition.gap_fill_config().map_err(AppError::Domain)?;
-    passage
-        .validate_against_gap_fill_config(gap_cfg)
-        .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
     let engine = deps.engines.get(definition.kind)?;
 
     let items: Vec<LearningItem> = Vec::new();
     let mut prepared = engine
         .prepare_content(&items, &definition)
         .map_err(AppError::Domain)?;
-    prepared.passage = Some(passage);
+
+    match definition.kind {
+        GameKind::GapFill => {
+            let gap_cfg = definition.gap_fill_config().map_err(AppError::Domain)?;
+            let passage: PassageGapLlmOutput =
+                serde_json::from_value(session.base_context.clone()).map_err(|e| {
+                    AppError::Repository(format!("stored passage (base_context): {e}"))
+                })?;
+            passage
+                .validate_against_gap_fill_config(gap_cfg)
+                .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
+            prepared.passage = Some(passage);
+        }
+        GameKind::CorrectUsage => {
+            let batch: CorrectUsageLlmOutput =
+                serde_json::from_value(session.base_context.clone()).map_err(|e| {
+                    AppError::Repository(format!("stored correct_usage batch (base_context): {e}"))
+                })?;
+            let cfg = definition.correct_usage_config().map_err(AppError::Domain)?;
+            let words: Vec<String> = batch.puzzles.iter().map(|p| p.word.clone()).collect();
+            batch
+                .validate(&words, cfg.max_sentence_words)
+                .map_err(AppError::from)?;
+            prepared.correct_usage_batch = Some(batch);
+        }
+    }
 
     let steps = engine
         .generate_steps(&prepared, &definition)
@@ -68,8 +87,8 @@ pub async fn play_again_gap_fill(
     deps.events
         .append(
             session_id,
-            "gap_fill_play_again",
-            serde_json::json!({ "at": now }),
+            "session_play_again",
+            serde_json::json!({ "at": now, "kind": definition.kind }),
         )
         .await?;
 

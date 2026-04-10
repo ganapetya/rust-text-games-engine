@@ -1,3 +1,4 @@
+use crate::correct_usage_llm::CorrectUsageLlmOutput;
 use crate::ids::{LearningItemId, UserId};
 use crate::passage::PassageGapLlmOutput;
 use serde::{Deserialize, Serialize};
@@ -33,4 +34,7 @@ pub struct PreparedContent {
     /// Set after LLM validation when building a passage session.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub passage: Option<PassageGapLlmOutput>,
+    /// Set after LLM validation for `correct_usage` sessions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub correct_usage_batch: Option<CorrectUsageLlmOutput>,
 }

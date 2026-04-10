@@ -1,4 +1,4 @@
-use shakti_game_domain::{PassageGapLlmOutput, PassageHardWordOccurrence};
+use shakti_game_domain::{CorrectUsageLlmOutput, PassageGapLlmOutput, PassageHardWordOccurrence};
 
 fn spans_overlap(a: (usize, usize), b: (usize, usize)) -> bool {
     a.0 < b.1 && b.0 < a.1
@@ -108,6 +108,14 @@ pub fn parse_passage_gap_response(raw: &str) -> Result<PassageGapLlmOutput, Stri
     let cleaned = strip_code_fences(raw);
     serde_json::from_str::<PassageGapLlmOutput>(&cleaned)
         .map_err(|e| format!("invalid LLM JSON: {e}"))
+}
+
+pub fn parse_correct_usage_response(raw: &str) -> Result<CorrectUsageLlmOutput, String> {
+    let cleaned = strip_code_fences(raw);
+    let mut out = serde_json::from_str::<CorrectUsageLlmOutput>(&cleaned)
+        .map_err(|e| format!("invalid correct_usage LLM JSON: {e}"))?;
+    out.repair_pairwise_duplicate_sentences();
+    Ok(out)
 }
 
 #[cfg(test)]

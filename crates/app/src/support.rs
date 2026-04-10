@@ -2,7 +2,7 @@
 //! Integration tests and the binary both use this so scenarios exercise the same stack as production.
 
 use shakti_game_api::{build_router, AppState};
-use shakti_game_domain::{GameEngineRegistry, GapFillEngine};
+use shakti_game_domain::{CorrectUsageEngine, GameEngineRegistry, GapFillEngine};
 use shakti_game_engine_core::ports::BillingChargeScheduler;
 use shakti_game_engine_core::{EngineDeps, LlmContentPreparer};
 use shakti_game_infrastructure::{
@@ -64,6 +64,7 @@ pub fn build_app_state(
 
     let mut engines = GameEngineRegistry::new();
     engines.register(Arc::new(GapFillEngine::new()));
+    engines.register(Arc::new(CorrectUsageEngine::new()));
     let engines = Arc::new(engines);
 
     let deps = Arc::new(EngineDeps {

@@ -30,6 +30,12 @@ pub enum UserFacingStepPrompt {
         text_with_gaps: String,
         slots: Vec<GapFillSlotPublic>,
     },
+    /// Pick which of three sentences uses the target word correctly (order is shuffled vs LLM output).
+    CorrectUsageChoice {
+        word: String,
+        /// Three options, labels A/B/C by index 0/1/2 in the UI.
+        options: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

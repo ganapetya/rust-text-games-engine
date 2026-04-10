@@ -2,7 +2,7 @@ use crate::answer::{ExpectedAnswer, StepEvaluation, UserAnswer};
 use crate::errors::DomainError;
 use crate::game_step::{GameStep, StepState};
 use crate::ids::{GameDefinitionId, GameSessionId, UserId};
-use crate::policies::{GameDefinition, GapFillScoringMode, ScoringPolicy};
+use crate::policies::{GameDefinition, GameKind, GapFillScoringMode, ScoringPolicy};
 use crate::score::Score;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -53,21 +53,34 @@ impl GameSession {
         })
     }
 
-    fn num_gaps_from_steps(steps: &[GameStep]) -> usize {
-        steps
-            .first()
-            .map(|s| match &s.expected_answer {
-                ExpectedAnswer::GapFillSlots { values } => values.len(),
-                ExpectedAnswer::ExactText { .. } => 1,
-            })
-            .unwrap_or(0)
+    fn correct_usage_total_points(definition: &GameDefinition, num_steps: usize) -> i32 {
+        let per = match &definition.scoring_policy {
+            ScoringPolicy::FixedPerCorrect { points } => *points,
+        };
+        per * num_steps as i32
+    }
+
+    /// Scoring units for max achievable points: gap-fill = gaps in first step; correct_usage = step count.
+    fn scoring_units_for_total(definition: &GameDefinition, steps: &[GameStep]) -> Result<i32, DomainError> {
+        match definition.kind {
+            GameKind::GapFill => {
+                let n = steps
+                    .first()
+                    .map(|s| match &s.expected_answer {
+                        ExpectedAnswer::GapFillSlots { values } => values.len(),
+                        ExpectedAnswer::ExactText { .. } => 1,
+                    })
+                    .unwrap_or(0);
+                Self::passage_total_points(definition, n)
+            }
+            GameKind::CorrectUsage => Ok(Self::correct_usage_total_points(definition, steps.len())),
+        }
     }
 
     /// Refreshes `score.total_points` from the current steps and definition (e.g. after materializing a draft).
     pub fn recompute_total_points(&mut self) -> Result<(), DomainError> {
         let def = self.definition()?;
-        let n = Self::num_gaps_from_steps(&self.steps);
-        self.score.total_points = Self::passage_total_points(def, n)?.max(0);
+        self.score.total_points = Self::scoring_units_for_total(def, &self.steps)?.max(0);
         Ok(())
     }
 
@@ -110,8 +123,7 @@ impl GameSession {
         definition: GameDefinition,
         base_context: serde_json::Value,
     ) -> Result<Self, DomainError> {
-        let ng = Self::num_gaps_from_steps(&steps);
-        let total = Self::passage_total_points(&definition, ng)?;
+        let total = Self::scoring_units_for_total(&definition, &steps)?;
         Ok(Self {
             id,
             user_id,
