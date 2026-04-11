@@ -127,6 +127,10 @@ impl GameEngine for GapFillEngine {
             },
             passage: None,
             correct_usage_batch: None,
+            crossword: None,
+            session_seed: None,
+            crossword_ui_language: None,
+            crossword_difficulty: None,
         })
     }
 
@@ -202,7 +206,7 @@ impl GameEngine for GapFillEngine {
         let cfg = definition.gap_fill_config()?;
         let expected = match &step.expected_answer {
             ExpectedAnswer::GapFillSlots { values } => values,
-            ExpectedAnswer::ExactText { .. } => {
+            ExpectedAnswer::ExactText { .. } | ExpectedAnswer::Crossword { .. } => {
                 return Err(DomainError::InvalidTransition(
                     "expected gap_fill_slots".into(),
                 ));

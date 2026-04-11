@@ -61,6 +61,13 @@ impl GameSession {
     }
 
     /// Scoring units for max achievable points: gap-fill = gaps in first step; correct_usage = step count.
+    fn crossword_total_points(definition: &GameDefinition, num_words: usize) -> i32 {
+        let per = match &definition.scoring_policy {
+            ScoringPolicy::FixedPerCorrect { points } => *points,
+        };
+        per * num_words as i32
+    }
+
     fn scoring_units_for_total(definition: &GameDefinition, steps: &[GameStep]) -> Result<i32, DomainError> {
         match definition.kind {
             GameKind::GapFill => {
@@ -69,11 +76,22 @@ impl GameSession {
                     .map(|s| match &s.expected_answer {
                         ExpectedAnswer::GapFillSlots { values } => values.len(),
                         ExpectedAnswer::ExactText { .. } => 1,
+                        ExpectedAnswer::Crossword { words, .. } => words.len(),
                     })
                     .unwrap_or(0);
                 Self::passage_total_points(definition, n)
             }
             GameKind::CorrectUsage => Ok(Self::correct_usage_total_points(definition, steps.len())),
+            GameKind::Crossword => {
+                let n = steps
+                    .first()
+                    .map(|s| match &s.expected_answer {
+                        ExpectedAnswer::Crossword { words, .. } => words.len(),
+                        _ => 0,
+                    })
+                    .unwrap_or(0);
+                Ok(Self::crossword_total_points(definition, n))
+            }
         }
     }
 
@@ -230,6 +248,7 @@ impl GameSession {
         step.state = StepState::TimedOut;
         let add = match self.steps.get(idx).map(|s| &s.expected_answer) {
             Some(ExpectedAnswer::GapFillSlots { values }) => values.len() as i32,
+            Some(ExpectedAnswer::Crossword { words, .. }) => words.len() as i32,
             _ => 1,
         };
         self.score.answered_count += add;

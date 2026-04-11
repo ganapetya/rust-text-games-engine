@@ -2,10 +2,13 @@
 
 use crate::deps::EngineDeps;
 use crate::errors::AppError;
+use crate::services::translation_hint::read_session_ui_hints;
 use shakti_game_domain::{
-    CorrectUsageLlmOutput, GameKind, GameSession, GameSessionId, GameSessionState, LearningItem,
-    PassageGapLlmOutput, UserId,
+    CorrectUsageLlmOutput, CrosswordLlmOutput, GameKind, GameSession, GameSessionId,
+    GameSessionState, LearningItem, PassageGapLlmOutput, UserId,
 };
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 pub async fn play_again(
     deps: &EngineDeps,
@@ -59,7 +62,30 @@ pub async fn play_again(
                 .map_err(AppError::from)?;
             prepared.correct_usage_batch = Some(batch);
         }
+        GameKind::Crossword => {
+            let cw_cfg = definition.crossword_config().map_err(AppError::Domain)?;
+            let cw: CrosswordLlmOutput =
+                serde_json::from_value(session.base_context.clone()).map_err(|e| {
+                    AppError::Repository(format!("stored crossword (base_context): {e}"))
+                })?;
+            cw.validate_against_crossword_config(cw_cfg)
+                .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
+            prepared.crossword = Some(cw);
+        }
     }
+
+    let mut h_seed = DefaultHasher::new();
+    session.id.hash(&mut h_seed);
+    prepared.session_seed = Some(h_seed.finish());
+    let (source_lang, _) = read_session_ui_hints(&session.base_context);
+    prepared.crossword_ui_language = source_lang;
+    let diff = session
+        .base_context
+        .get("_session")
+        .and_then(|s| s.get("crossword_difficulty"))
+        .and_then(|v| v.as_u64())
+        .map(|u| u as u8);
+    prepared.crossword_difficulty = diff;
 
     let steps = engine
         .generate_steps(&prepared, &definition)

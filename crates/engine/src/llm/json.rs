@@ -1,4 +1,7 @@
-use shakti_game_domain::{CorrectUsageLlmOutput, PassageGapLlmOutput, PassageHardWordOccurrence};
+use shakti_game_domain::{
+    CorrectUsageLlmOutput, CrosswordHintsLlmOutput, CrosswordLlmOutput, PassageGapLlmOutput,
+    PassageHardWordOccurrence,
+};
 
 fn spans_overlap(a: (usize, usize), b: (usize, usize)) -> bool {
     a.0 < b.1 && b.0 < a.1
@@ -115,6 +118,39 @@ pub fn parse_correct_usage_response(raw: &str) -> Result<CorrectUsageLlmOutput, 
     let mut out = serde_json::from_str::<CorrectUsageLlmOutput>(&cleaned)
         .map_err(|e| format!("invalid correct_usage LLM JSON: {e}"))?;
     out.repair_pairwise_duplicate_sentences();
+    Ok(out)
+}
+
+/// Parse and lightly repair the old full-grid crossword LLM response (kept for compatibility).
+#[allow(dead_code)]
+pub fn parse_crossword_response(raw: &str) -> Result<CrosswordLlmOutput, String> {
+    let cleaned = strip_code_fences(raw);
+    let mut out = serde_json::from_str::<CrosswordLlmOutput>(&cleaned)
+        .map_err(|e| format!("invalid crossword LLM JSON: {e}"))?;
+    out.normalize_case();
+    out.repair_grid_widths();
+    out.repair_word_grid_conflicts();
+    Ok(out)
+}
+
+/// Parse the hints-and-bridges LLM response (new strategy).
+pub fn parse_crossword_hints_response(raw: &str) -> Result<CrosswordHintsLlmOutput, String> {
+    let cleaned = strip_code_fences(raw);
+    let mut out = serde_json::from_str::<CrosswordHintsLlmOutput>(&cleaned)
+        .map_err(|e| format!("invalid crossword hints LLM JSON: {e}"))?;
+
+    // Normalise all words to uppercase.
+    for hw in &mut out.hard_word_hints {
+        hw.word = hw.word.trim().to_uppercase();
+    }
+    for bw in &mut out.bridge_words {
+        bw.word = bw.word.trim().to_uppercase();
+    }
+
+    // Filter bridge words to letters-only (some models sneak in hyphens etc.).
+    out.bridge_words
+        .retain(|bw| !bw.word.is_empty() && bw.word.chars().all(|c| c.is_alphabetic()));
+
     Ok(out)
 }
 

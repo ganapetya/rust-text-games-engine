@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use shakti_game_domain::{
-    CorrectUsageLlmOutput, CorrectUsagePuzzleLlm, GameDefinition, LearningItem, PassageGapLlmOutput,
-    PassageHardWordOccurrence, PASSAGE_LLM_SCHEMA_VERSION, UserId,
+    CorrectUsageLlmOutput, CorrectUsagePuzzleLlm, CrosswordHintsLlmOutput, CrosswordWordHint,
+    GameDefinition, LearningItem, PassageGapLlmOutput, PassageHardWordOccurrence,
+    CROSSWORD_HINTS_SCHEMA_VERSION, PASSAGE_LLM_SCHEMA_VERSION, UserId,
 };
 
 use crate::errors::AppError;
@@ -182,5 +183,77 @@ impl LlmContentPreparer for MockLlmContentPreparer {
         out.validate(registered_hard_words, cfg.max_sentence_words)
             .map_err(AppError::from)?;
         Ok((out, LlmTokenUsage::default()))
+    }
+
+    async fn build_crossword_hints(
+        &self,
+        user_id: UserId,
+        trace_id: Option<&str>,
+        learning_items: &[LearningItem],
+        registered_hard_words: &[String],
+        language: &str,
+        definition: &GameDefinition,
+    ) -> Result<(CrosswordHintsLlmOutput, LlmTokenUsage), AppError> {
+        let cfg = definition.crossword_config().map_err(AppError::from)?;
+
+        tracing::info!(
+            user_id = %user_id.0,
+            trace_id = trace_id.unwrap_or(""),
+            mode = "mock",
+            items_in = learning_items.len(),
+            lang = language,
+            "llm crossword hints build (mock)"
+        );
+
+        let clean: Vec<String> = registered_hard_words
+            .iter()
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let hard_word_hints: Vec<CrosswordWordHint> = clean
+            .iter()
+            .map(|w| CrosswordWordHint {
+                word: w.clone(),
+                hint: format!("Mock clue for {w}."),
+            })
+            .collect();
+
+        // Generate a small set of bridge words with shared letters for good crossing potential.
+        let bridge_pool = [
+            ("TEST", "A trial or examination."),
+            ("MOCK", "A simulation or imitation."),
+            ("KATT", "A common household pet."),
+            ("HUND", "A loyal domestic animal."),
+            ("ELEV", "A student at school."),
+            ("SKOG", "An area with many trees."),
+            ("LAND", "A country or territory."),
+            ("SALT", "A mineral used for seasoning."),
+            ("ROSE", "A flowering plant with thorns."),
+            ("GRAM", "A unit of mass."),
+        ];
+        let bridge_count = (cfg.max_words as usize * 2).max(8).min(bridge_pool.len());
+        let bridge_words: Vec<CrosswordWordHint> = bridge_pool[..bridge_count]
+            .iter()
+            .map(|(w, h)| CrosswordWordHint {
+                word: w.to_string(),
+                hint: h.to_string(),
+            })
+            .collect();
+
+        let story = format!(
+            "Mock crossword story in {language} (offline). Words: {}.",
+            clean.join(", ")
+        );
+
+        Ok((
+            CrosswordHintsLlmOutput {
+                schema_version: CROSSWORD_HINTS_SCHEMA_VERSION,
+                story,
+                hard_word_hints,
+                bridge_words,
+            },
+            LlmTokenUsage::default(),
+        ))
     }
 }

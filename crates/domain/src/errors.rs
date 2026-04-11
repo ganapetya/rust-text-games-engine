@@ -44,4 +44,10 @@ pub enum DomainError {
 
     #[error("missing correct usage batch in prepared content")]
     MissingCorrectUsageBatch,
+
+    #[error("missing crossword payload in prepared content")]
+    MissingCrossword,
+
+    #[error("invalid crossword context: {0}")]
+    InvalidCrosswordContext(String),
 }

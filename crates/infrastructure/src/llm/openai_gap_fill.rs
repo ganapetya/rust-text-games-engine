@@ -7,10 +7,13 @@ use async_openai::types::chat::{
 use async_openai::Client;
 use async_trait::async_trait;
 use shakti_game_domain::{
-    CorrectUsageLlmOutput, GameDefinition, LearningItem, PassageGapLlmOutput, UserId,
+    CorrectUsageLlmOutput, CrosswordHintsLlmOutput, GameDefinition, LearningItem,
+    PassageGapLlmOutput, UserId,
 };
 use shakti_game_engine_core::llm::{
-    correct_usage_system_prompt, correct_usage_user_message_json, parse_correct_usage_response,
+    correct_usage_system_prompt, correct_usage_user_message_json,
+    crossword_hints_system_prompt, crossword_hints_user_message,
+    parse_correct_usage_response, parse_crossword_hints_response,
     parse_passage_gap_response, passage_gap_system_prompt, passage_gap_user_message_json,
     reconcile_hard_word_spans,
 };
@@ -206,6 +209,92 @@ impl LlmContentPreparer for OpenAiGapFillPreparer {
         let out = parse_correct_usage_response(&text).map_err(AppError::LlmPreparation)?;
         out.validate(registered_hard_words, cfg.max_sentence_words)
             .map_err(AppError::from)?;
+        Ok((out, usage))
+    }
+
+    async fn build_crossword_hints(
+        &self,
+        user_id: UserId,
+        trace_id: Option<&str>,
+        learning_items: &[LearningItem],
+        registered_hard_words: &[String],
+        language: &str,
+        definition: &GameDefinition,
+    ) -> Result<(CrosswordHintsLlmOutput, LlmTokenUsage), AppError> {
+        let cfg = definition.crossword_config().map_err(AppError::from)?;
+
+        tracing::info!(
+            user_id = %user_id.0,
+            trace_id = trace_id.unwrap_or(""),
+            model = %self.model,
+            items_in = learning_items.len(),
+            hard_words = registered_hard_words.len(),
+            "llm crossword hints+bridges build (openai)"
+        );
+
+        let system_msg = ChatCompletionRequestSystemMessage {
+            content: ChatCompletionRequestSystemMessageContent::Text(
+                crossword_hints_system_prompt(cfg, language),
+            ),
+            name: None,
+        };
+
+        let user_json = serde_json::to_string(&crossword_hints_user_message(
+            learning_items,
+            registered_hard_words,
+            language,
+            cfg,
+        ))
+        .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
+
+        let user_msg = ChatCompletionRequestUserMessage {
+            content: ChatCompletionRequestUserMessageContent::Text(user_json),
+            name: None,
+        };
+
+        let messages = vec![
+            ChatCompletionRequestMessage::System(system_msg),
+            ChatCompletionRequestMessage::User(user_msg),
+        ];
+
+        let request = CreateChatCompletionRequestArgs::default()
+            .model(self.model.to_string())
+            .messages(messages)
+            .response_format(ResponseFormat::JsonObject)
+            .build()
+            .map_err(|e| AppError::LlmPreparation(format!("openai request build: {e}")))?;
+
+        let response = self
+            .client
+            .chat()
+            .create(request)
+            .await
+            .map_err(|e| AppError::LlmPreparation(format!("openai chat completion: {e}")))?;
+
+        let usage = response
+            .usage
+            .map(|u| LlmTokenUsage {
+                prompt_tokens: u.prompt_tokens as u64,
+                completion_tokens: u.completion_tokens as u64,
+            })
+            .unwrap_or_default();
+
+        let text = response
+            .choices
+            .first()
+            .and_then(|c| c.message.content.clone())
+            .ok_or_else(|| AppError::LlmPreparation("empty openai response".into()))?;
+
+        let out = parse_crossword_hints_response(&text).map_err(AppError::LlmPreparation)?;
+
+        tracing::info!(
+            user_id = %user_id.0,
+            trace_id = trace_id.unwrap_or(""),
+            hard_hints = out.hard_word_hints.len(),
+            bridge_words = out.bridge_words.len(),
+            "crossword hints received; placement will follow"
+        );
+
         Ok((out, usage))
     }
 }

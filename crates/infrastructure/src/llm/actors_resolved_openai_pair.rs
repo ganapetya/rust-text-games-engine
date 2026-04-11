@@ -3,7 +3,8 @@
 use async_trait::async_trait;
 use reqwest::Url;
 use shakti_game_domain::{
-    CorrectUsageLlmOutput, GameDefinition, LearningItem, PassageGapLlmOutput, UserId,
+    CorrectUsageLlmOutput, CrosswordHintsLlmOutput, GameDefinition, LearningItem,
+    PassageGapLlmOutput, UserId,
 };
 use shakti_game_engine_core::{AppError, LlmContentPreparer};
 use shakti_game_translation::{LlmTextTranslator, LlmTokenUsage, TranslationError, TranslationParams};
@@ -142,6 +143,27 @@ impl LlmContentPreparer for ActorsResolvedOpenAiPair {
     ) -> Result<(CorrectUsageLlmOutput, LlmTokenUsage), AppError> {
         let (prep, _) = self.ensure_inner().await?;
         prep.build_correct_usage_context(
+            user_id,
+            trace_id,
+            learning_items,
+            registered_hard_words,
+            language,
+            definition,
+        )
+        .await
+    }
+
+    async fn build_crossword_hints(
+        &self,
+        user_id: UserId,
+        trace_id: Option<&str>,
+        learning_items: &[LearningItem],
+        registered_hard_words: &[String],
+        language: &str,
+        definition: &GameDefinition,
+    ) -> Result<(CrosswordHintsLlmOutput, LlmTokenUsage), AppError> {
+        let (prep, _) = self.ensure_inner().await?;
+        prep.build_crossword_hints(
             user_id,
             trace_id,
             learning_items,

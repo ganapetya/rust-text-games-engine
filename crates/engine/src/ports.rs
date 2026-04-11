@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shakti_game_domain::{
-    CorrectUsageLlmOutput, GameDefinition, GameSession, GameSessionId, GameStep, LearningItem,
-    PassageGapLlmOutput, UserId,
+    CorrectUsageLlmOutput, CrosswordHintsLlmOutput, GameDefinition, GameSession, GameSessionId,
+    GameStep, LearningItem, PassageGapLlmOutput, UserId,
 };
 use std::sync::Arc;
 use time::OffsetDateTime;
@@ -79,6 +79,7 @@ pub trait GameDefinitionRepository: Send + Sync {
     ) -> Result<GameDefinition, AppError>;
     async fn get_default_gap_fill(&self) -> Result<GameDefinition, AppError>;
     async fn get_default_correct_usage(&self) -> Result<GameDefinition, AppError>;
+    async fn get_default_crossword(&self) -> Result<GameDefinition, AppError>;
 }
 
 #[async_trait]
@@ -136,4 +137,15 @@ pub trait LlmContentPreparer: Send + Sync {
         language: &str,
         definition: &GameDefinition,
     ) -> Result<(CorrectUsageLlmOutput, LlmTokenUsage), AppError>;
+
+    /// New strategy: LLM supplies clues + bridge words; the grid is built by the placer.
+    async fn build_crossword_hints(
+        &self,
+        user_id: UserId,
+        trace_id: Option<&str>,
+        learning_items: &[LearningItem],
+        registered_hard_words: &[String],
+        language: &str,
+        definition: &GameDefinition,
+    ) -> Result<(CrosswordHintsLlmOutput, LlmTokenUsage), AppError>;
 }

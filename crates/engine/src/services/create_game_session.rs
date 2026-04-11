@@ -15,6 +15,9 @@ pub struct SessionOptions {
     /// Locale codes (e.g. BCP-47) allowed for optional full-text translation hints; normalized on materialize (max 16).
     #[serde(default)]
     pub hint_translation_languages: Option<Vec<String>>,
+    /// Crossword only: difficulty 1 (≈50% words prefilled), 2 (≈25%), 3 (none). Falls back to definition default.
+    #[serde(default)]
+    pub crossword_difficulty: Option<u8>,
 }
 
 pub struct CreateGameSessionCommand {
@@ -43,6 +46,7 @@ pub async fn create_game_session(
         (_, Some(id)) => deps.definitions.get(id).await?,
         (GameKind::GapFill, None) => deps.definitions.get_default_gap_fill().await?,
         (GameKind::CorrectUsage, None) => deps.definitions.get_default_correct_usage().await?,
+        (GameKind::Crossword, None) => deps.definitions.get_default_crossword().await?,
     };
 
     if definition.kind != cmd.game_kind {

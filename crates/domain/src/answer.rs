@@ -1,3 +1,4 @@
+use crate::crossword::CrosswordDirection;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -5,6 +6,20 @@ use serde::{Deserialize, Serialize};
 pub enum UserAnswer {
     Text { value: String },
     GapFillSlots { selections: Vec<String> },
+    /// Player grid: same dimensions as the prompt; `""` = empty letter cell; `"#"` = block.
+    CrosswordCells {
+        cells: Vec<Vec<String>>,
+    },
+}
+
+/// One word’s canonical answer for server-side scoring.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrosswordExpectedWord {
+    pub id: u32,
+    pub start_row: usize,
+    pub start_col: usize,
+    pub direction: CrosswordDirection,
+    pub answer: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,6 +27,11 @@ pub enum UserAnswer {
 pub enum ExpectedAnswer {
     ExactText { value: String },
     GapFillSlots { values: Vec<String> },
+    Crossword {
+        rows: usize,
+        cols: usize,
+        words: Vec<CrosswordExpectedWord>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

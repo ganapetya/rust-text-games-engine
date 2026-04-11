@@ -1,4 +1,5 @@
 use crate::answer::{ExpectedAnswer, StepEvaluation, UserAnswer};
+use crate::crossword::CrosswordDirection;
 use crate::ids::GameStepId;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -21,6 +22,17 @@ pub struct GapFillSlotPublic {
     pub choices: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrosswordWordPublic {
+    pub id: u32,
+    pub hint: String,
+    pub start_row: usize,
+    pub start_col: usize,
+    pub direction: CrosswordDirection,
+    /// When true, every letter cell of this word is locked (difficulty prefill).
+    pub is_prefilled_word: bool,
+}
+
 /// Payload shown to the player for one step (API / UI). Distinct from internal engine-only state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -35,6 +47,18 @@ pub enum UserFacingStepPrompt {
         word: String,
         /// Three options, labels A/B/C by index 0/1/2 in the UI.
         options: Vec<String>,
+    },
+    CrosswordGrid {
+        story: String,
+        rows: usize,
+        cols: usize,
+        /// `""` empty editable, `"#"` block, or a single letter for locked prefills.
+        cells: Vec<Vec<String>>,
+        /// Same shape as `cells`; `true` means the player cannot edit that cell.
+        locked_cells: Vec<Vec<bool>>,
+        words: Vec<CrosswordWordPublic>,
+        /// CSS `dir` value for the grid (`ltr` or `rtl`).
+        text_direction: String,
     },
 }
 

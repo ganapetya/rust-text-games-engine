@@ -75,6 +75,10 @@ impl GameEngine for CorrectUsageEngine {
             },
             passage: None,
             correct_usage_batch: None,
+            crossword: None,
+            session_seed: None,
+            crossword_ui_language: None,
+            crossword_difficulty: None,
         })
     }
 

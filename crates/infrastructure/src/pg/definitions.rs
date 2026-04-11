@@ -41,6 +41,7 @@ impl PgGameDefinitionRepository {
         let kind_enum = match kind.as_str() {
             "gap_fill" => GameKind::GapFill,
             "correct_usage" => GameKind::CorrectUsage,
+            "crossword" => GameKind::Crossword,
             _ => return Err(AppError::Repository(format!("unknown game kind {kind}"))),
         };
         let config: GameConfig =
@@ -101,6 +102,20 @@ impl GameDefinitionRepository for PgGameDefinitionRepository {
         .await
         .map_err(|e| AppError::Repository(e.to_string()))?
         .ok_or_else(|| AppError::NotFound("default correct_usage definition".into()))?;
+
+        Self::map_row(&row)
+    }
+
+    async fn get_default_crossword(&self) -> Result<GameDefinition, AppError> {
+        let row = sqlx::query(
+            r#"SELECT id, kind, version, name, config, scoring_policy, timing_policy
+               FROM game_definitions WHERE kind = 'crossword' AND active = true
+               ORDER BY version DESC LIMIT 1"#,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AppError::Repository(e.to_string()))?
+        .ok_or_else(|| AppError::NotFound("default crossword definition".into()))?;
 
         Self::map_row(&row)
     }

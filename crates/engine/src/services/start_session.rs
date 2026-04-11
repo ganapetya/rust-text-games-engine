@@ -7,8 +7,10 @@ use crate::ports::{ContentRequest, GameLlmChargeArgs};
 use crate::services::create_game_session::SessionOptions;
 use crate::services::translation_hint::normalize_hint_translation_languages;
 use serde::Deserialize;
-use shakti_game_domain::{GameKind, GameSessionId, GameSessionState, UserId};
+use shakti_game_domain::{build_crossword, GameKind, GameSessionId, GameSessionState, UserId, WordCandidate};
 use shakti_game_pricing::coins_for_usage;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 #[derive(Deserialize)]
 struct DeferredPayload {
@@ -18,10 +20,12 @@ struct DeferredPayload {
     trace_id: Option<String>,
 }
 
+/// `override_crossword_difficulty`: override the difficulty stored at bootstrap time (crossword only).
 pub async fn start_game_session(
     deps: &EngineDeps,
     session_id: GameSessionId,
     user_id: UserId,
+    override_crossword_difficulty: Option<u8>,
 ) -> Result<shakti_game_domain::GameSession, AppError> {
     let mut session = deps.sessions.get(session_id).await?; // loads session, steps, definition join
     if session.user_id != user_id {
@@ -55,7 +59,13 @@ pub async fn start_game_session(
         .ok_or_else(|| AppError::BadRequest("content_request.language required".into()))?
         .to_string();
 
-    let definition = session.definition().map_err(AppError::Domain)?.clone();
+    let mut definition = session.definition().map_err(AppError::Domain)?.clone();
+    if let Ok(cw) = definition.crossword_config() {
+        if cw.is_time_game && cw.game_time_seconds > 0 {
+            definition.timing_policy.session_limit_secs = Some(cw.game_time_seconds as u32);
+        }
+    }
+    session.definition = Some(definition.clone());
 
     let mut content_request = deferred.content_request.clone();
     let cap_llm_items = match definition.kind {
@@ -65,6 +75,10 @@ pub async fn start_game_session(
             .max_learning_items_for_llm,
         GameKind::CorrectUsage => definition
             .correct_usage_config()
+            .map_err(AppError::Domain)?
+            .max_learning_items_for_llm,
+        GameKind::Crossword => definition
+            .crossword_config()
             .map_err(AppError::Domain)?
             .max_learning_items_for_llm,
     };
@@ -111,6 +125,12 @@ pub async fn start_game_session(
 
     let engine = deps.engines.get(definition.kind)?;
     let mut prepared = engine.prepare_content(&items, &definition)?;
+    let mut h_seed = DefaultHasher::new();
+    session.id.hash(&mut h_seed);
+    prepared.session_seed = Some(h_seed.finish());
+    prepared.crossword_ui_language = Some(lang.clone());
+    prepared.crossword_difficulty = override_crossword_difficulty
+        .or(deferred.session_options.crossword_difficulty);
 
     let (steps, mut base_context, usage) = match definition.kind {
         GameKind::GapFill => {
@@ -157,19 +177,89 @@ pub async fn start_game_session(
                 serde_json::to_value(&batch).map_err(|e| AppError::Repository(e.to_string()))?;
             (steps, base, usage)
         }
+        GameKind::Crossword => {
+            let cw_cfg = definition.crossword_config().map_err(AppError::Domain)?;
+
+            // Step 1: ask the LLM for story + clues + bridge words only (no grid).
+            let (hints, usage) = deps
+                .llm_preparer
+                .build_crossword_hints(
+                    user_id,
+                    trace,
+                    &items,
+                    &vocabulary,
+                    &lang,
+                    &definition,
+                )
+                .await?;
+
+            // Step 2: assemble WordCandidates — hard words first, then bridge words.
+            //         For hard words that the LLM didn't provide a hint for, use a fallback.
+            let hint_map: std::collections::HashMap<String, String> = hints
+                .hard_word_hints
+                .iter()
+                .map(|h| (h.word.trim().to_uppercase(), h.hint.clone()))
+                .collect();
+
+            let mut candidates: Vec<WordCandidate> = vocabulary
+                .iter()
+                .map(|w| {
+                    let upper = w.trim().to_uppercase();
+                    let hint = hint_map
+                        .get(&upper)
+                        .cloned()
+                        .unwrap_or_else(|| format!("Practice word: {upper}"));
+                    WordCandidate { word: upper, hint, is_hard: true }
+                })
+                .collect();
+
+            for bw in &hints.bridge_words {
+                candidates.push(WordCandidate {
+                    word: bw.word.trim().to_uppercase(),
+                    hint: bw.hint.clone(),
+                    is_hard: false,
+                });
+            }
+
+            // Step 3: run the deterministic placement algorithm.
+            let cw = build_crossword(&candidates, hints.story, cw_cfg)
+                .map_err(AppError::LlmPreparation)?;
+
+            cw.validate_against_crossword_config(cw_cfg)
+                .map_err(|e| AppError::LlmPreparation(e.to_string()))?;
+            prepared.crossword = Some(cw.clone());
+            let steps = engine.generate_steps(&prepared, &definition)?;
+            let base =
+                serde_json::to_value(&cw).map_err(|e| AppError::Repository(e.to_string()))?;
+            (steps, base, usage)
+        }
     };
 
     let hint_langs =
         normalize_hint_translation_languages(deferred.session_options.hint_translation_languages.as_ref());
+    let mut session_meta = serde_json::json!({
+        "source_language": lang,
+        "hint_translation_languages": hint_langs,
+        "translation_cache": serde_json::json!({}),
+    });
+    if definition.kind == GameKind::Crossword {
+        if let Ok(cw) = definition.crossword_config() {
+            let d = override_crossword_difficulty
+                .or(deferred.session_options.crossword_difficulty)
+                .unwrap_or(cw.default_difficulty);
+            if let Some(obj) = session_meta.as_object_mut() {
+                obj.insert("crossword_difficulty".into(), serde_json::json!(d));
+                if cw.is_time_game && cw.game_time_seconds > 0 {
+                    obj.insert(
+                        "crossword_timer_secs".into(),
+                        serde_json::json!(cw.game_time_seconds),
+                    );
+                }
+            }
+        }
+    }
     if let Some(obj) = base_context.as_object_mut() {
-        obj.insert(
-            "_session".to_string(),
-            serde_json::json!({
-                "source_language": lang,
-                "hint_translation_languages": hint_langs,
-                "translation_cache": serde_json::json!({}),
-            }),
-        );
+        obj.insert("_session".to_string(), session_meta);
     }
 
     if let Some(ref w) = wallet_opt {
@@ -247,6 +337,7 @@ pub async fn start_game_session(
                 "steps_count": session.steps.len(),
                 "passage_gaps": session.steps.first().map(|s| match &s.expected_answer {
                     shakti_game_domain::ExpectedAnswer::GapFillSlots { values } => values.len(),
+                    shakti_game_domain::ExpectedAnswer::Crossword { words, .. } => words.len(),
                     _ => 0,
                 }).unwrap_or(0),
             }),

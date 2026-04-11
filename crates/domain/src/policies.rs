@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-/// Game family: passage gap-fill and per-word usage choice.
+/// Game family: passage gap-fill, crossword, and per-word usage choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GameKind {
     GapFill,
     CorrectUsage,
+    Crossword,
 }
 
 /// Static definition for a game type (loaded from DB / seeded).
@@ -25,18 +26,33 @@ impl GameDefinition {
     pub fn gap_fill_config(&self) -> Result<&GapFillPassageConfig, crate::errors::DomainError> {
         match &self.config {
             GameConfig::GapFill(c) => Ok(c),
-            GameConfig::CorrectUsage(_) => Err(crate::errors::DomainError::InvalidTransition(
-                "not a gap_fill definition".into(),
-            )),
+            GameConfig::CorrectUsage(_) | GameConfig::Crossword(_) => {
+                Err(crate::errors::DomainError::InvalidTransition(
+                    "not a gap_fill definition".into(),
+                ))
+            }
         }
     }
 
     pub fn correct_usage_config(&self) -> Result<&CorrectUsageConfig, crate::errors::DomainError> {
         match &self.config {
             GameConfig::CorrectUsage(c) => Ok(c),
-            GameConfig::GapFill(_) => Err(crate::errors::DomainError::InvalidTransition(
-                "not a correct_usage definition".into(),
-            )),
+            GameConfig::GapFill(_) | GameConfig::Crossword(_) => {
+                Err(crate::errors::DomainError::InvalidTransition(
+                    "not a correct_usage definition".into(),
+                ))
+            }
+        }
+    }
+
+    pub fn crossword_config(&self) -> Result<&CrosswordConfig, crate::errors::DomainError> {
+        match &self.config {
+            GameConfig::Crossword(c) => Ok(c),
+            GameConfig::GapFill(_) | GameConfig::CorrectUsage(_) => {
+                Err(crate::errors::DomainError::InvalidTransition(
+                    "not a crossword definition".into(),
+                ))
+            }
         }
     }
 }
@@ -49,6 +65,71 @@ pub enum GameConfig {
     GapFill(GapFillPassageConfig),
     #[serde(rename = "correct_usage")]
     CorrectUsage(CorrectUsageConfig),
+    #[serde(rename = "crossword")]
+    Crossword(CrosswordConfig),
+}
+
+fn default_max_grid_dim() -> u32 {
+    24
+}
+
+fn default_max_words() -> u32 {
+    40
+}
+
+fn default_max_hint_chars() -> u32 {
+    400
+}
+
+fn default_false() -> bool {
+    false
+}
+
+fn default_game_time_seconds() -> i32 {
+    0
+}
+
+fn default_crossword_difficulty() -> u8 {
+    3
+}
+
+/// Rules for LLM authoring + UI for crossword (single step).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrosswordConfig {
+    #[serde(default = "default_max_learning_items_for_llm")]
+    pub max_learning_items_for_llm: u32,
+    #[serde(default = "default_max_grid_dim")]
+    pub max_grid_rows: u32,
+    #[serde(default = "default_max_grid_dim")]
+    pub max_grid_cols: u32,
+    #[serde(default = "default_max_words")]
+    pub max_words: u32,
+    #[serde(default = "default_max_hint_chars")]
+    pub max_hint_chars: u32,
+    /// When true and `game_time_seconds` > 0, session gets a wall-clock limit at start.
+    #[serde(default = "default_false")]
+    pub is_time_game: bool,
+    /// Seconds for whole session when timed; `0` means unlimited even if `is_time_game`.
+    #[serde(default = "default_game_time_seconds")]
+    pub game_time_seconds: i32,
+    /// Used when the client does not pass `crossword_difficulty` in session options (1–3).
+    #[serde(default = "default_crossword_difficulty")]
+    pub default_difficulty: u8,
+}
+
+impl Default for CrosswordConfig {
+    fn default() -> Self {
+        Self {
+            max_learning_items_for_llm: default_max_learning_items_for_llm(),
+            max_grid_rows: default_max_grid_dim(),
+            max_grid_cols: default_max_grid_dim(),
+            max_words: default_max_words(),
+            max_hint_chars: default_max_hint_chars(),
+            is_time_game: false,
+            game_time_seconds: 0,
+            default_difficulty: default_crossword_difficulty(),
+        }
+    }
 }
 
 fn default_max_sentence_words_correct_usage() -> u32 {

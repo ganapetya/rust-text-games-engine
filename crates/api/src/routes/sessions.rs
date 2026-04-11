@@ -6,8 +6,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use shakti_game_domain::{
-    GameKind, GameSession, GameSessionId, GameSessionState, GameStep, StepState, UserAnswer,
-    UserFacingStepPrompt, UserId,
+    CrosswordDirection, ExpectedAnswer, GameKind, GameSession, GameSessionId, GameSessionState,
+    GameStep, StepState, UserAnswer, UserFacingStepPrompt, UserId,
 };
 use shakti_game_engine_core::{
     advance_session, create_game_session, get_game_result, get_game_session, play_again,
@@ -87,6 +87,8 @@ pub struct SessionOptionsDto {
     pub step_time_limit_secs: Option<u32>,
     #[serde(default)]
     pub hint_translation_languages: Option<Vec<String>>,
+    #[serde(default)]
+    pub crossword_difficulty: Option<u8>,
 }
 
 #[derive(Serialize)]
@@ -232,6 +234,7 @@ async fn bootstrap_session(
         options: SessionOptions {
             step_time_limit_secs: body.options.step_time_limit_secs,
             hint_translation_languages: body.options.hint_translation_languages.clone(),
+            crossword_difficulty: body.options.crossword_difficulty,
         },
         content_package_audit: Some(body.content_package),
         billing: SessionBillingBootstrap {
@@ -270,6 +273,7 @@ async fn create_session(
         options: SessionOptions {
             step_time_limit_secs: body.options.step_time_limit_secs,
             hint_translation_languages: body.options.hint_translation_languages.clone(),
+            crossword_difficulty: body.options.crossword_difficulty,
         },
         content_package_audit: None,
         billing: SessionBillingBootstrap {
@@ -292,6 +296,9 @@ async fn create_session(
 #[serde(rename_all = "camelCase")]
 pub struct UserActionBody {
     pub user_id: Uuid,
+    /// Crossword only: override the pre-filled difficulty (1 = easier, 3 = hardest / none pre-filled).
+    #[serde(default)]
+    pub crossword_difficulty: Option<u8>,
 }
 
 async fn start_session(
@@ -306,7 +313,7 @@ async fn start_session(
         trace_id = %trace.trace_id,
         "start_game_session"
     );
-    let session = start_game_session(&state.deps, sid, UserId(body.user_id))
+    let session = start_game_session(&state.deps, sid, UserId(body.user_id), body.crossword_difficulty)
         .await
         .map_err(ApiError::from_app_err)?;
     Ok(Json(
@@ -501,6 +508,12 @@ pub struct SessionPublicView {
     pub wallet_balance: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub llm_spend_suspended: Option<bool>,
+    /// Crossword: difficulty stored at materialize (1–3).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub crossword_difficulty: Option<u8>,
+    /// Crossword: wall-clock limit in seconds when timed (`_session.crossword_timer_secs`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub crossword_timer_secs: Option<i32>,
 }
 
 #[derive(Serialize)]
@@ -515,6 +528,11 @@ pub struct StepPublic {
     /// Correct answer per gap (ordinal 0 … n−1) when `GAME_ENGINE_DEV_EXPOSE_GAP_SOLUTION` is set.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dev_gap_solution: Option<Vec<String>>,
+    /// Crossword only: full solution grid exposed after the step is evaluated.
+    /// Same dimensions as `userFacingStepPrompt.cells`: `"#"` = block, letter = correct letter.
+    /// Used by the UI to highlight wrong cells.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub crossword_solution_cells: Option<Vec<Vec<String>>>,
 }
 
 #[derive(Serialize)]
@@ -545,12 +563,29 @@ fn dev_llm_inputs_from_base(
     base.get("_dev_llm_inputs").cloned()
 }
 
+fn crossword_public_fields(base: &serde_json::Value) -> (Option<u8>, Option<i32>) {
+    let Some(sess) = base.get("_session") else {
+        return (None, None);
+    };
+    let d = sess
+        .get("crossword_difficulty")
+        .and_then(|v| v.as_u64())
+        .map(|u| u as u8);
+    let t = sess
+        .get("crossword_timer_secs")
+        .and_then(|v| v.as_i64())
+        .map(|i| i as i32);
+    (d, t)
+}
+
 fn sync_to_public_view(session: &GameSession, dev_expose_gap_solution: bool) -> SessionPublicView {
     let current_step = session
         .current_step()
         .map(|s| step_public(s, dev_expose_gap_solution));
     let (source_language, hint_translation_languages) =
         read_session_ui_hints(&session.base_context);
+    let (crossword_difficulty, crossword_timer_secs) =
+        crossword_public_fields(&session.base_context);
     SessionPublicView {
         session_id: session.id.0,
         user_id: session.user_id.0,
@@ -564,6 +599,8 @@ fn sync_to_public_view(session: &GameSession, dev_expose_gap_solution: bool) -> 
         dev_llm_inputs: dev_llm_inputs_from_base(&session.base_context, dev_expose_gap_solution),
         wallet_balance: None,
         llm_spend_suspended: None,
+        crossword_difficulty,
+        crossword_timer_secs,
     }
 }
 
@@ -625,6 +662,47 @@ fn dev_gap_solution(step: &GameStep, expose: bool) -> Option<Vec<String>> {
     }
 }
 
+/// Build the full correct-letter grid for crossword steps after evaluation.
+/// Only populated when the step has been evaluated (or timed out) — reveals correct answers.
+fn crossword_solution_cells(step: &GameStep) -> Option<Vec<Vec<String>>> {
+    if step.state != StepState::Evaluated && step.state != StepState::TimedOut {
+        return None;
+    }
+    let ExpectedAnswer::Crossword { rows, cols, words } = &step.expected_answer else {
+        return None;
+    };
+    let prompt_cells = match &step.user_facing_step_prompt {
+        UserFacingStepPrompt::CrosswordGrid { cells, .. } => cells,
+        _ => return None,
+    };
+
+    // Initialise with blocks copied from the prompt.
+    let mut sol: Vec<Vec<String>> = vec![vec!["".into(); *cols]; *rows];
+    for r in 0..*rows {
+        for c in 0..*cols {
+            if prompt_cells.get(r).and_then(|row| row.get(c)).map(|s| s == "#").unwrap_or(false) {
+                sol[r][c] = "#".into();
+            }
+        }
+    }
+
+    // Fill correct letters from word answers.
+    for w in words {
+        let chars: Vec<char> = w.answer.chars().collect();
+        for (i, ch) in chars.iter().enumerate() {
+            let (r, c) = match w.direction {
+                CrosswordDirection::Across => (w.start_row, w.start_col + i),
+                CrosswordDirection::Down => (w.start_row + i, w.start_col),
+            };
+            if r < *rows && c < *cols {
+                sol[r][c] = ch.to_string();
+            }
+        }
+    }
+
+    Some(sol)
+}
+
 fn step_public(step: &GameStep, dev_expose_gap_solution: bool) -> StepPublic {
     StepPublic {
         id: step.id.0,
@@ -634,5 +712,6 @@ fn step_public(step: &GameStep, dev_expose_gap_solution: bool) -> StepPublic {
         user_answer: step.user_answer.clone(),
         evaluation: step.evaluation.clone(),
         dev_gap_solution: dev_gap_solution(step, dev_expose_gap_solution),
+        crossword_solution_cells: crossword_solution_cells(step),
     }
 }

@@ -1,5 +1,8 @@
 pub mod answer;
 pub mod content;
+pub mod crossword;
+pub mod crossword_engine;
+pub mod crossword_placer;
 pub mod correct_usage_llm;
 pub mod engine;
 pub mod errors;
@@ -13,17 +16,25 @@ pub mod result;
 pub mod score;
 pub mod usage_quiz;
 
-pub use answer::{ExpectedAnswer, StepEvaluation, UserAnswer};
+pub use answer::{CrosswordExpectedWord, ExpectedAnswer, StepEvaluation, UserAnswer};
 pub use content::{LearningItem, PreparedContent, PreparedItem};
 pub use engine::{GameEngine, GameEngineRegistry};
 pub use errors::DomainError;
 pub use game_session::{GameSession, GameSessionState};
-pub use game_step::{GameStep, GapFillSlotPublic, StepState, UserFacingStepPrompt};
+pub use game_step::{
+    CrosswordWordPublic, GameStep, GapFillSlotPublic, StepState, UserFacingStepPrompt,
+};
 pub use gap_fill::GapFillEngine;
 pub use ids::{GameDefinitionId, GameSessionId, GameStepId, LearningItemId, UserId};
 pub use passage::{PassageGapLlmOutput, PassageHardWordOccurrence, PASSAGE_LLM_SCHEMA_VERSION};
+pub use crossword::{
+    CrosswordDirection, CrosswordHintsLlmOutput, CrosswordLlmOutput, CrosswordWordEntry,
+    CrosswordWordHint, CROSSWORD_BLOCK, CROSSWORD_HINTS_SCHEMA_VERSION, CROSSWORD_LLM_SCHEMA_VERSION,
+};
+pub use crossword_placer::{build_crossword, WordCandidate};
+pub use crossword_engine::CrosswordEngine;
 pub use policies::{
-    CorrectUsageConfig, GameConfig, GameDefinition, GameKind, GapFillLlmTemplate,
+    CorrectUsageConfig, CrosswordConfig, GameConfig, GameDefinition, GameKind, GapFillLlmTemplate,
     GapFillPassageConfig, GapFillScoringMode, ScoringPolicy, TimingPolicy,
 };
 pub use correct_usage_llm::{

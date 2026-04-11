@@ -1,11 +1,11 @@
-//! On-demand full-text translation of the stored passage (`PassageGapLlmOutput.full_text`).
+//! On-demand full-text translation of passage (`full_text`) or crossword (`story`).
 
 use crate::billing::{read_wallet_from_base, wallet_llm_blocked};
 use crate::deps::EngineDeps;
 use crate::errors::AppError;
 use crate::ports::GameLlmChargeArgs;
 use shakti_game_domain::{
-    GameKind, GameSessionId, GameSessionState, PassageGapLlmOutput, UserId,
+    CrosswordLlmOutput, GameKind, GameSessionId, GameSessionState, PassageGapLlmOutput, UserId,
 };
 use shakti_game_pricing::coins_for_usage;
 use shakti_game_translation::TranslationParams;
@@ -78,7 +78,8 @@ pub async fn request_translation_hint(
         ));
     }
 
-    if session.definition().map_err(AppError::Domain)?.kind == GameKind::CorrectUsage {
+    let game_kind = session.definition().map_err(AppError::Domain)?.kind;
+    if game_kind == GameKind::CorrectUsage {
         return Err(AppError::BadRequest(
             "translation hints are not available for correct_usage sessions".into(),
         ));
@@ -116,8 +117,27 @@ pub async fn request_translation_hint(
         }
     }
 
-    let passage: PassageGapLlmOutput = serde_json::from_value(session.base_context.clone())
-        .map_err(|e| AppError::Repository(format!("stored passage (base_context): {e}")))?;
+    let source_text: String = match game_kind {
+        GameKind::GapFill => {
+            let passage: PassageGapLlmOutput =
+                serde_json::from_value(session.base_context.clone()).map_err(|e| {
+                    AppError::Repository(format!("stored passage (base_context): {e}"))
+                })?;
+            passage.full_text
+        }
+        GameKind::Crossword => {
+            let cw: CrosswordLlmOutput =
+                serde_json::from_value(session.base_context.clone()).map_err(|e| {
+                    AppError::Repository(format!("stored crossword (base_context): {e}"))
+                })?;
+            cw.story
+        }
+        GameKind::CorrectUsage => {
+            return Err(AppError::BadRequest(
+                "translation hints are not available for correct_usage sessions".into(),
+            ));
+        }
+    };
 
     let cache_key = target_language.clone();
 
@@ -148,7 +168,7 @@ pub async fn request_translation_hint(
         trace_id = trace_id.unwrap_or(""),
         session_id = %session_id.0,
         target_language = %target_language,
-        chars = passage.full_text.chars().count(),
+        chars = source_text.chars().count(),
         "translation_hint llm call"
     );
 
@@ -160,7 +180,7 @@ pub async fn request_translation_hint(
             TranslationParams {
                 source_lang: source_language.clone(),
                 target_lang: target_language.clone(),
-                text: passage.full_text.clone(),
+                text: source_text.clone(),
             },
         )
         .await
