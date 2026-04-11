@@ -37,6 +37,11 @@ pub async fn create_game_session(
     deps: &EngineDeps,
     cmd: CreateGameSessionCommand,
 ) -> Result<GameSession, AppError> {
+    let event_branch = match cmd.game_kind {
+        GameKind::GapFill => "gap_fill",
+        GameKind::CorrectUsage => "correct_usage",
+        GameKind::Crossword => "crossword",
+    };
     tracing::info!(
         user_id = %cmd.user_id.0,
         trace_id = cmd.trace_id.as_deref().unwrap_or(""),
@@ -101,6 +106,8 @@ pub async fn create_game_session(
             session.id,
             "session_created",
             serde_json::json!({
+                "game_kind": cmd.game_kind,
+                "event_branch": event_branch,
                 "state": shakti_game_domain::GameSessionState::Draft,
                 "steps_count": 0,
             }),

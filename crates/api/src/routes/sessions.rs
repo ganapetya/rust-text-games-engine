@@ -334,7 +334,7 @@ async fn play_again_session(
         trace_id = %trace.trace_id,
         "play_again"
     );
-    let session = play_again(&state.deps, sid, UserId(body.user_id))
+    let session = play_again(&state.deps, sid, UserId(body.user_id), body.crossword_difficulty)
         .await
         .map_err(ApiError::from_app_err)?;
     Ok(Json(
@@ -429,13 +429,13 @@ async fn submit_step_answer(
     let session = submit_answer(&state.deps, cmd)
         .await
         .map_err(ApiError::from_app_err)?;
-    let current = session.current_step();
-    let eval = current.and_then(|s| s.evaluation.clone());
+    let submitted = session.steps.iter().find(|s| s.id.0 == step_id);
+    let eval = submitted.and_then(|s| s.evaluation.clone());
     Ok(Json(AnswerResp {
         step_id,
         correct: eval.as_ref().map(|e| e.is_correct).unwrap_or(false),
         awarded_points: eval.as_ref().map(|e| e.awarded_points).unwrap_or(0),
-        next_state: current.map(|s| s.state).unwrap_or(StepState::Pending),
+        next_state: submitted.map(|s| s.state).unwrap_or(StepState::Pending),
         current_score: ScoreDto::from(&session.score),
         session_state: session.state,
     }))

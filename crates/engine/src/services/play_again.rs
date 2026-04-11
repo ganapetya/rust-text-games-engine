@@ -14,6 +14,7 @@ pub async fn play_again(
     deps: &EngineDeps,
     session_id: GameSessionId,
     user_id: UserId,
+    difficulty_override: Option<u8>,
 ) -> Result<GameSession, AppError> {
     let mut session = deps.sessions.get(session_id).await?;
     if session.user_id != user_id {
@@ -79,13 +80,30 @@ pub async fn play_again(
     prepared.session_seed = Some(h_seed.finish());
     let (source_lang, _) = read_session_ui_hints(&session.base_context);
     prepared.crossword_ui_language = source_lang;
-    let diff = session
-        .base_context
-        .get("_session")
-        .and_then(|s| s.get("crossword_difficulty"))
-        .and_then(|v| v.as_u64())
-        .map(|u| u as u8);
+    // Use caller-supplied difficulty override, or fall back to the value stored at start time.
+    let diff = difficulty_override.or_else(|| {
+        session
+            .base_context
+            .get("_session")
+            .and_then(|s| s.get("crossword_difficulty"))
+            .and_then(|v| v.as_u64())
+            .map(|u| u as u8)
+    });
     prepared.crossword_difficulty = diff;
+
+    // Persist the applied difficulty back into base_context so the public
+    // view (crossword_difficulty field) reflects what the round was actually
+    // generated with.  Without this, the frontend's "did difficulty change?"
+    // guard would see the old value and keep triggering unnecessary rounds.
+    if let Some(d) = diff {
+        if let Some(sess_obj) = session
+            .base_context
+            .get_mut("_session")
+            .and_then(|v| v.as_object_mut())
+        {
+            sess_obj.insert("crossword_difficulty".into(), serde_json::json!(d));
+        }
+    }
 
     let steps = engine
         .generate_steps(&prepared, &definition)
@@ -114,7 +132,15 @@ pub async fn play_again(
         .append(
             session_id,
             "session_play_again",
-            serde_json::json!({ "at": now, "kind": definition.kind }),
+            serde_json::json!({
+                "at": now,
+                "game_kind": definition.kind,
+                "event_branch": match definition.kind {
+                    GameKind::GapFill => "gap_fill",
+                    GameKind::CorrectUsage => "correct_usage",
+                    GameKind::Crossword => "crossword",
+                },
+            }),
         )
         .await?;
 

@@ -334,6 +334,11 @@ pub async fn start_game_session(
             serde_json::json!({
                 "at": now,
                 "game_kind": definition.kind,
+                "event_branch": match definition.kind {
+                    GameKind::GapFill => "gap_fill",
+                    GameKind::CorrectUsage => "correct_usage",
+                    GameKind::Crossword => "crossword",
+                },
                 "steps_count": session.steps.len(),
                 "passage_gaps": session.steps.first().map(|s| match &s.expected_answer {
                     shakti_game_domain::ExpectedAnswer::GapFillSlots { values } => values.len(),

@@ -1,6 +1,14 @@
 use crate::deps::EngineDeps;
 use crate::errors::AppError;
-use shakti_game_domain::{GameSessionId, GameStepId, UserAnswer};
+use shakti_game_domain::{GameKind, GameSessionId, GameStepId, UserAnswer};
+
+fn game_kind_branch(kind: GameKind) -> &'static str {
+    match kind {
+        GameKind::GapFill => "gap_fill",
+        GameKind::CorrectUsage => "correct_usage",
+        GameKind::Crossword => "crossword",
+    }
+}
 
 pub struct SubmitAnswerCommand {
     pub session_id: GameSessionId,
@@ -61,11 +69,21 @@ pub async fn submit_answer(
         .clone();
 
     let definition = session.definition().map_err(AppError::Domain)?.clone();
+    let game_branch = game_kind_branch(definition.kind);
     let engine = deps.engines.get(definition.kind)?;
     let evaluation = engine.evaluate_answer(&step, &cmd.answer, now, &definition)?; // per-gap or all-or-nothing scoring
 
     let submitted = cmd.answer.clone();
     session.record_evaluation(step_index, evaluation.clone(), submitted, now)?; // persists score, may complete session
+    // Correct-usage is an explicitly multi-step game: submit deterministically advances
+    // to the next active step (except on the final step, where state becomes completed).
+    let mut auto_advanced = false;
+    if definition.kind == GameKind::CorrectUsage
+        && session.state == shakti_game_domain::GameSessionState::InProgress
+    {
+        session.advance(now)?;
+        auto_advanced = true;
+    }
     deps.sessions.update(&session).await?; // write `user_answer` + `evaluation` JSON on the step row
     deps.events
         .append(
@@ -73,12 +91,31 @@ pub async fn submit_answer(
             "answer_submitted",
             serde_json::json!({
                 "step_id": cmd.step_id,
+                "step_index": step_index,
+                "game_kind": definition.kind,
+                "event_branch": game_branch,
                 "correct": evaluation.is_correct,
                 "points": evaluation.awarded_points,
                 "gap_stats": evaluation.gap_stats,
+                "auto_advanced": auto_advanced,
             }),
         )
         .await?;
+    if auto_advanced {
+        deps.events
+            .append(
+                cmd.session_id,
+                "step_advanced",
+                serde_json::json!({
+                    "game_kind": definition.kind,
+                    "event_branch": game_branch,
+                    "trigger": "submit_auto",
+                    "current_step_index": session.current_step_index,
+                    "state": session.state,
+                }),
+            )
+            .await?;
+    }
 
     Ok(session)
 }
