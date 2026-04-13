@@ -17,7 +17,7 @@ and JSON HTTP API.
 
 ![Example](3.png)
 
-![Example](4.png)
+![Example](4.jpg)
 
 ![Example](5.png)
 
