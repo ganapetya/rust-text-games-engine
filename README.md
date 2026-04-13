@@ -11,7 +11,15 @@ and JSON HTTP API.
 
 # Example Text Games
 
+![Example](1.png)
 
+![Example](2.png)
+
+![Example](3.png)
+
+![Example](4.png)
+
+![Example](5.png)
 
 
 It is **standalone** (own database and Docker Compose) 
