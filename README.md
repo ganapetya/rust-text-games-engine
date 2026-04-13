@@ -1,6 +1,20 @@
-# shakti-game-engine
+# Text Game Engine (For language learners)
 
-Rust service that runs language-learning **gap-fill** game sessions: state machine, scoring, PostgreSQL persistence, and JSON HTTP API. It is **standalone** (own database and Docker Compose) and can be wired into the wider Shakti stack later.
+Rust service that runs language-learning game sessions: 
+
+state machine, scoring, 
+
+PostgreSQL persistence, 
+
+and JSON HTTP API. 
+
+
+# Example Text Games
+
+
+
+
+It is **standalone** (own database and Docker Compose) 
 
 ## Run locally (Rust)
 
