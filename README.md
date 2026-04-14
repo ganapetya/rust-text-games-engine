@@ -8,6 +8,18 @@ PostgreSQL persistence,
 
 and JSON HTTP API. 
 
+1)
+
+Has a crosswords engine inside (heuristic greedy algorithm to compose crosswords)
+
+LLM supplies words, hints, algorithm creates a crossword.
+
+2)
+
+Other text games , based on LLM response
+
+
+
 
 # Example Text Games (IF SEPARATE - NOT THIS PROJECT - UI ATTACHED)
 
