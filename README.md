@@ -9,7 +9,7 @@ PostgreSQL persistence,
 and JSON HTTP API. 
 
 
-# Example Text Games
+# Example Text Games (IF SEPARATE - NOT THIS PROJECT - UI ATTACHED)
 
 ![Example](1.png)
 
