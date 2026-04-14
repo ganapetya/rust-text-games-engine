@@ -20,7 +20,6 @@ Other text games , based on LLM response
 
 
 
-
 # Example Text Games (IF SEPARATE - NOT THIS PROJECT - UI ATTACHED)
 
 ![Example](1.png)
