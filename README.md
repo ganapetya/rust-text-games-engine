@@ -8,6 +8,8 @@ PostgreSQL persistence,
 
 and JSON HTTP API. 
 
+# Used in real language learning platform: [www.logoscat.com](https://logoscat.com)
+
 1)
 
 Has a crosswords engine inside (heuristic greedy algorithm to compose crosswords)
