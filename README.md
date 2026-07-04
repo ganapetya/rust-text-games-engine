@@ -8,7 +8,7 @@ PostgreSQL persistence,
 
 and JSON HTTP API. 
 
-# Used in real language learning platform: [www.logoscat.com](https://logoscat.com)
+
 
 1)
 
